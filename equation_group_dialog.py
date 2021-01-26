@@ -8,11 +8,12 @@ __license__ = "MIT"
 
 # import sys
 # from PyQt5.QtCore import Qt, QSize
+# noinspection PyUnresolvedReferences
 from PyQt5.uic import loadUi
 # from PyQt5.QtGui import QPainter, QColor, QIcon, QBrush
 from PyQt5.QtWidgets import (
     QLineEdit, QTextEdit,
-    QListWidget, QDialog, QDialogButtonBox, QGraphicsView
+    QListWidget, QDialog, QDialogButtonBox
 )
 from equation_group import EquationGroup
 
@@ -25,6 +26,8 @@ class Equation_Group_Dialog(QDialog):
         # Info Widgets
         self.buttonbox: QDialogButtonBox = self.findChild(QDialogButtonBox, 'buttonbox')
         self.existing_eq_group_list: QListWidget = self.findChild(QListWidget, 'existing_eq_group_list')
+        self.existing_eq_group_list.itemSelectionChanged.connect(self.equatGroupSelected)
+
         self.eq_list: QListWidget = self.findChild(QListWidget, 'eq_list')
         self.existing_notes_textbox: QTextEdit = self.findChild(QTextEdit, 'existing_notes_textEdit')
         self.new_eq_group_lEdit: QLineEdit = self.findChild(QLineEdit, 'new_eq_group_lEdit')
@@ -51,3 +54,9 @@ class Equation_Group_Dialog(QDialog):
 
     def getEquationGroup(self):
         return self.eqn_group
+
+    def equatGroupSelected(self):
+        ind = self.existing_eq_group_list.currentIndex().row()
+
+        associated_note = self.eqn_group.records[ind].notes
+        self.existing_notes_textbox.setText(associated_note)
