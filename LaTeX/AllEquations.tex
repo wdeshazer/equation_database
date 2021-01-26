@@ -1,0 +1,117 @@
+\documentclass[]{article}
+
+\usepackage{amsmath}
+\usepackage{siunitx}
+\usepackage{diffcoeff}
+\usepackage{graphicx}
+\usepackage[space]{grffile}
+\usepackage{url}
+\usepackage{enumitem}
+\usepackage{pythontex}
+\usepackage{appendix}
+\usepackage{etoolbox}
+\usepackage{pmboxdraw}
+%\usepackage[utf8]{inputenc}
+\usepackage{pythonhighlight}
+\usepackage{relsize}
+\usepackage[hidelinks]{hyperref}
+\usepackage[all]{hypcap}
+\usepackage{prettyref,cleveref}
+\usepackage[margin=0.75in]{geometry}
+\usepackage{mathtools}
+\usepackage{cancel}
+\usepackage{parskip}
+\usepackage{placeins}
+\usepackage{subfig}
+\usepackage{bigints}
+\usepackage[style=numeric, backend=biber]{biblatex}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmathfont{Cambria Math}
+
+\renewcommand{\CancelColor}{\color{blue}} %change cancel color to red
+
+\setlength{\parskip}{1em}
+
+
+\setcounter{section}{0} 
+
+\setcounter{secnumdepth}{4}
+
+\crefname{section}{Section}{Sections}
+\crefname{subsection}{Section}{Sections}
+\crefname{susubsection}{Section}{Sections}
+\crefname{paragraph}{Section}{Sections}
+\crefname{equation}{Equation}{Equations}
+\crefname{figure}{Figure}{Figures}
+\crefname{table}{Table}{Tables}
+\crefname{listing}{Listing}{Listings}
+\newrefformat{eq}{Equation \ref{#1} on page \pageref{#1}}
+
+
+\def \figpath {"Images/"}
+
+\def \diffpfunc #1#2{\diffp*{\left(\vphantom{\diffp*{}#2}#1\right)}#2}
+%\diffp*{\left( \vphantom{\diffp*{}#2}#2 #1 \right)}#1 \right)
+\def \func #1#2{#1\left(\vphantom{#1} #2\right)}
+\def \FrIOL #1{\func{ F_{#1\vphantom{j}}^\mathrm{iol} }{r}} % Using Phantom J to ensure parens for both j and k are same size
+\def \flux #1{\func{ \hat{\Gamma}_{r#1}}{r} }
+
+% Inserts \clearpage before \begin{appendices}
+%\BeforeBeginEnvironment{appendices}{\clearpage}
+% Inserts \clearpage after \end{appendices}
+%\AfterEndEnvironment{appendices}{\clearpage}
+
+% Inserts \clearpage before every \section within appendices environment
+\AtBeginEnvironment{appendices}{\pretocmd{\section}{\clearpage}{}{}}{}
+
+
+\addbibresource{Plasma-Transport-Code.bib}
+
+%opening
+\title{ A Particle-, Momentum-, and Energy-Conserving Fluid Transport Code for Tokamak Plasmas}
+\author{E. William DeShazer}
+\date{\today}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Conservation of Particles}
+
+\section{Theory} \label{sec:Theory}
+\subsection{Conservation of Particles} \label{sub:ParticleConservation}
+	\begin{equation}
+		\cfrac{1}{r} \diffpfunc{ r \func{\hat{\Gamma}_{r\sigma}}{r}}{r} =
+			S_{n\sigma} -\diffpfunc{ \FrIOL{\sigma} }{r} \flux{\sigma}
+	\label{eqn:Continuity}
+	\end{equation}
+	where,
+	\begin{equation}
+		S_{n\sigma} \equiv \func{N_{\mathrm{nb}\sigma}}{r} \left( 1\ -\hat{\alpha } \func{f^\mathrm{iol}_\mathrm{nbi}}{r} \right)+ \func{n_{e}}{r} \nu _{\mathrm{ion}_j} (r)
+	\label{eqn:Source}
+	\end{equation}
+
+	\begin{table}[h]
+		\centering
+		\caption{Design Parameters}
+		\begin{tabular}{l c c}\hline \label{tab:DesignParams}
+			Parameter                     & Value     & Unit        \\
+			\hline
+			\textbf{Heated Channel}	      &           &             \\
+			Mass Flow Rate  			  & 0.60      &  kg/sec     \\
+			Coolant inlet temperature, 	  & 278.8     &  $^\circ$C  \\
+			Coolant inlet pressure        & 7.25      &  MPa        \\
+			Core active height            & 3.66      &  m          \\
+			Heated effective diameter     & 0.016943  &  m          \\
+			Flow area                     & 1.903     &  cm$^2$     \\
+			Layer height                  & 10.16     &  cm         \\
+			\hline
+		\end{tabular}
+	\end{table}
+
+
+
+\end{document}
+

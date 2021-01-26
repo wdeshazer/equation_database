@@ -1,0 +1,26 @@
+\documentclass[convert]{standalone}
+
+\usepackage{amsmath}
+\usepackage{siunitx}
+\sisetup{load-configurations = abbreviations}
+\usepackage{diffcoeff}
+\usepackage{graphicx}
+\usepackage{mathtools}
+\usepackage{fontspec}
+\usepackage{unicode-math}
+\setmathfont{Cambria Math}
+
+\def \diffpfunc #1#2{\diffp*{\left(\vphantom{\diffp*{}#2}#1\right)}#2}
+%\diffp*{\left( \vphantom{\diffp*{}#2}#2 #1 \right)}#1 \right)
+\def \func #1#2{#1\left(\vphantom{#1} #2\right)}
+\def \FrIOL #1{\func{ F_{#1\vphantom{j}}^\mathrm{iol} }{r}} % Using Phantom J to ensure parens for both j and k are same size
+\def \flux #1{\func{ \hat{\Gamma}_{r#1}}{r} }
+
+\begin{document}
+
+$\displaystyle
+    a^2 + b^2 = c^2
+$
+
+\end{document}
+
