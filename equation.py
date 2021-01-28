@@ -10,7 +10,7 @@ class Equation(MathObject):
 
     def __init__(self, table='equation', join_table='equation_eqn_group'):
         """Constructor for Equation"""
-        super(Equation, self).__init__(table=table, join_table=join_table)
+        super(Equation, self).__init__(table=table)
 
     def insert(self, unit_id: int = 1, eq_type='Equality', *args, **kwargs):
         data = {'unit_id': unit_id, 'equation_type': eq_type}

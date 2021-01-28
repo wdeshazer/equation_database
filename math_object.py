@@ -3,6 +3,7 @@ math_object Provides helper functions for pulling the LaTeX template from the eq
 
 update method: https://stackoverflow.com/questions/34774409/build-a-dynamic-update-query-in-psycopg2
 https://www.psycopg.org/docs/sql.html#
+Type Hinting Tuple: https://stackoverflow.com/questions/47533787/typehinting-tuples-in-python
 
 """
 
@@ -16,7 +17,7 @@ from psycopg2 import connect, OperationalError, Binary
 from psycopg2.extras import NamedTupleCursor
 from latex_template import compile_pattern, template
 from warnings import warn
-
+from typing import Tuple
 
 class MathObject:
     """"""
@@ -51,9 +52,12 @@ class MathObject:
 
         return records
 
-    def insert(self, parent: str = None, name: str = None, data=None, latex: str = None, notes: str = None,
+    def insert(self, parentTable: str = None, name: str = None, data=None, latex: str = None, notes: str = None,
                image: bytes = None, template_id: int = None, table_order: int = None, table_order_prev: int = None,
                created_by: str = None, verbose: bool = None):
+
+        if parentTable is not None:
+            record_ids = self.getIDsForParent(self, parentTable=parentTable)
 
         if data is None:
             data = {}
@@ -181,11 +185,93 @@ class MathObject:
         return record_cnt
 
     def associateParent(self, parentTable: str = None, parent_record: int = None, child_record: int = None,
-                        insertion_order: int = None, insertion_order_prev: int = None):
+                        insertion_order: int = None, insertion_order_prev: int = None, verbose: bool = False,
+                        created_by: str = None):
         parent_key = parentTable + '_id'
         self_key = self.table + '_id'
 
         join_table = self.table + '_' + parentTable
+
+        db_params = config()
+
+        data = {}
+
+        if created_by is None:
+            created_by = db_params['user']
+
+        if insertion_order is None:
+            insertion_order = self.record_count() + 1
+
+        if insertion_order_prev is None:
+            insertion_order_prev = insertion_order
+
+        data.update({
+            parent_key: parent_record,
+            self_key: child_record,
+            'insertion_order': insertion_order,
+            'insertion_order_prev': insertion_order_prev
+        })
+
+        sql = 'INSERT INTO {table} ({fields}) VALUES ({values})'
+
+        keys = data.keys()
+
+        query = SQL(sql).format(table=Identifier(join_table),
+                                fields=SQL(', ').join(map(Identifier, keys)),
+                                values=SQL(', ').join(map(Placeholder, keys)))
+
+        conn = connect(**db_params)
+
+        if verbose:
+            print(query.as_string(conn))
+
+        cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+        if verbose:
+            print('Adding new record to Table: {aTable}'.format(aTable=join_table))
+
+        try:
+            cur.execute(query, data)
+        except OperationalError as error:
+            print(error)
+
+        conn.commit()
+
+        cur.close()
+        conn.close()
+
+    def getIDsForParent(self, parentTable: str = None, parent_record: Tuple[int, ...] = None, verbose: bool = False):
+        parent_key = parentTable + '_id'
+        self_key = self.table + '_id'
+
+        join_table = self.table + '_' + parentTable
+
+        db_params = config()
+
+        sql = 'SELECT * FROM {table} WHERE {pkey}= %s ORDER BY insertion_order ASC;'
+
+        query = SQL(sql).format(
+            table=Identifier(join_table),
+            pkey=Identifier(parent_key))
+
+        conn = connect(**db_params)
+
+        if verbose:
+            print(query.as_string(conn))
+
+        cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+        try:
+            cur.execute(query, parent_record)
+        except OperationalError as error:
+            print(error)
+
+        records = cur.fetchall()
+
+        cur.close()
+        conn.close()
+
+        return records
 
     @staticmethod
     def _getNextID(verbose: bool = False) -> int:

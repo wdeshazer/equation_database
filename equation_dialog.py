@@ -8,13 +8,14 @@ __license__ = "MIT"
 
 # import sys
 # from PyQt5.QtCore import Qt, QSize
+# noinspection PyUnresolvedReferences
 from PyQt5.uic import loadUi
 # from PyQt5.QtGui import QPainter, QColor, QIcon, QBrush
 from PyQt5.QtWidgets import (
-    QLineEdit, QTextEdit,
+    QTextEdit,
     QListWidget, QDialog, QDialogButtonBox, QGraphicsView
 )
-from equation_group import EquationGroup
+# from equation_group import EquationGroup
 
 
 class Equation_Dialog(QDialog):
