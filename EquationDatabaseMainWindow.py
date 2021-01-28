@@ -37,11 +37,35 @@ from equation_group_dialog import Equation_Group_Dialog
 from config import config
 from psycopg2 import connect, OperationalError
 
-
 # region Windows Task Bar Icon
 import ctypes
 
+window_left_start = 1000
+window_top_start = 300
+window_height = 1500
+
 if platform.system() == "Windows":
+    import wmi
+
+    obj = wmi.WMI().Win32_PnPEntity(ConfigManagerErrorCode=0)
+
+    displays = [x for x in obj if x.PNPClass == 'Monitor']
+
+    if len(displays) == 2:
+        window_left_start = 3200
+        window_top_start = 25
+        window_height = 900
+    elif len(displays) == 3:
+        window_left_start = 7600
+        window_top_start = 300
+        window_height = 1500
+
+    # for item in obj:
+    #     if item.Name == 'Dell S2240T(HDMI)':
+    #         window_left_start = 3200
+    #         window_top_start = 25
+    #         window_height = 900
+
     myappid = 'deshazersoftware.equationdatabase.equationdatabase.0.1'  # arbitrary string
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 # endregion
@@ -154,10 +178,10 @@ class Window(QMainWindow):
         # #afbcc6, #b9afc6, #afb0c6
 
         self.title = "Equation Database"
-        self.left = 7600
+        self.left = window_left_start
         # self.left = 0
-        self.top = 300
-        self.height = 1500
+        self.top = window_top_start
+        self.height = window_height
         self.width = int(self.height * golden_ratio)
 
         # region Data members
