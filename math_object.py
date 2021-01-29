@@ -12,6 +12,7 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 from typing import Tuple
+from collections import defaultdict
 from psycopg2.sql import SQL, Identifier, Placeholder
 from psycopg2 import connect, OperationalError, Binary
 from psycopg2.extras import NamedTupleCursor
@@ -29,7 +30,7 @@ class MathObject:
         self.records: list = self.all_records()
         self.last_inserted = None
 
-    def all_records(self, verbose: bool = False):
+    def all_records(self, as_columns: bool = False, verbose: bool = False):
         """Returns all records for math_object"""
         # sql = 'SELECT * FROM {aTable}'.format(aTable=self.table)
         sql = "SELECT * FROM {tbl}"
@@ -52,6 +53,9 @@ class MathObject:
 
         cur.close()
         conn.close()
+
+        if as_columns is True:
+            records = self.columnify(records)
 
         return records
 
@@ -131,6 +135,10 @@ class MathObject:
         self.last_inserted = new_records[0]
         self.records.append(new_records)
 
+    def records_as_columns(self):
+        """Returns the value of self.records as dictionary in column style format"""
+        return self.columnify(self.records)
+
     # Simple return statement. More sophisticated ones will have to be purpose built
     def values_for_fields(self, where_key: str = 'id', where_values: tuple = None,
                           name: bool = True, verbose: bool = False, **kwargs):
@@ -200,7 +208,7 @@ class MathObject:
 
         return record_count[0]
 
-    def record_count_for_parent(self, parent_record: Tuple[int, ...] = None,
+    def record_count_for_parent(self, parent_id: Tuple[int, ...] = None,
                                 verbose: bool = False):
         """Return record count for Parent Table"""
         sql = "SELECT COUNT(*) from {table} WHERE {parent_key} = %s"
@@ -216,9 +224,12 @@ class MathObject:
 
         if verbose:
             print('Getting Count of Records in table: {table} for Group ID: {gid}'.format(table=self.join_table(),
-                  gid=parent_record))
+                                                                                          gid=parent_id))
 
-        cur.execute(query, parent_record)  # self.table))
+        try:
+            cur.execute(query, parent_id)  # self.table))
+        except TypeError:
+            cur.execute(query, (parent_id,))
 
         record_count = cur.fetchone()
 
@@ -278,7 +289,8 @@ class MathObject:
         cur.close()
         conn.close()
 
-    def records_for_parent(self, parent_id: Tuple[int, ...] = None, verbose: bool = False):
+    def records_for_parent(self, parent_id: Tuple[int, ...] = None, as_columns: bool = False,
+                           verbose: bool = False):
         """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
 
@@ -297,6 +309,8 @@ class MathObject:
 
         try:
             cur.execute(query, parent_id)
+        except TypeError:
+            cur.execute(query, (parent_id,))
         except OperationalError as error:
             print(error)
 
@@ -304,6 +318,9 @@ class MathObject:
 
         cur.close()
         conn.close()
+
+        if as_columns is True:
+            records = self.columnify(records)
 
         return records
 
@@ -318,3 +335,17 @@ class MathObject:
     def join_table(self):
         """Join table which is a concatenation of the table and the parent table"""
         return self.table + '_' + self.parent_table
+
+    # NamedTuple uses underscores to prevent name collision _make, _replace, _asdict, _fields
+    # noinspection PyProtectedMember
+    @staticmethod
+    def columnify(records):
+        """Helper function to turn NameTuple records into column-like dictionaries"""
+        res = defaultdict(list)
+
+        for data in records:
+            record = data._asdict()
+            for key, value in record.items():
+                print(key)
+                res[key].append(value)
+        return res
