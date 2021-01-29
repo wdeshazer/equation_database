@@ -278,7 +278,7 @@ class MathObject:
         cur.close()
         conn.close()
 
-    def records_for_parent(self, parent_record: Tuple[int, ...] = None, verbose: bool = False):
+    def records_for_parent(self, parent_id: Tuple[int, ...] = None, verbose: bool = False):
         """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
 
@@ -296,7 +296,7 @@ class MathObject:
         cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
         try:
-            cur.execute(query, parent_record)
+            cur.execute(query, parent_id)
         except OperationalError as error:
             print(error)
 
