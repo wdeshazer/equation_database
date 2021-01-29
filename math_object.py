@@ -11,25 +11,26 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-from config import config
+from typing import Tuple
 from psycopg2.sql import SQL, Identifier, Placeholder
 from psycopg2 import connect, OperationalError, Binary
 from psycopg2.extras import NamedTupleCursor
 from latex_template import compile_pattern, template
-from warnings import warn
-from typing import Tuple
+from config import config
+# from warnings import warn
 
 
 class MathObject:
-    """"""
+    """Base class for Equations, Variables, and Units"""
     def __init__(self, table: str, parent_table: str):
         """Constructor for MathObject"""
         self.table = table
         self.parent_table = parent_table  # For equations it is eqn_group. For variables it is equations
-        self.records: list = self.allRecords()
+        self.records: list = self.all_records()
         self.last_inserted = None
 
-    def allRecords(self, verbose: bool = False):
+    def all_records(self, verbose: bool = False):
+        """Returns all records for math_object"""
         # sql = 'SELECT * FROM {aTable}'.format(aTable=self.table)
         sql = "SELECT * FROM {tbl}"
         query = SQL(sql).format(tbl=Identifier(self.table))
@@ -59,13 +60,14 @@ class MathObject:
                image: bytes = None, template_id: int = None,
                insertion_order: int = None, created_by: str = None,
                verbose: bool = None):
+        """Insert New Record Into math_object"""
 
         if data is None:
             data = {}
 
         db_params = config()
 
-        next_id: int = self.recordCountTotal(verbose=verbose) + 1
+        next_id: int = self.record_count_total(verbose=verbose) + 1
 
         if name is None:
             name = "{aTable} {ID:d}".format(ID=next_id, aTable=self.table)
@@ -75,13 +77,13 @@ class MathObject:
         if latex is None:
             latex = 'a^2 + b^2 = c^2'
 
-        theTemplate = template(version=template_id, verbose=verbose)
-        aTemplate = theTemplate.data
-        template_id = theTemplate.id
+        the_template = template(version=template_id, verbose=verbose)
+        a_template = the_template.data
+        template_id = the_template.id
 
         if image is None:
-            # If aTemplate is None the most recent template is used
-            image = Binary(compile_pattern(pattern=latex, aTemplate=aTemplate, verbose=verbose))
+            # If a_template is None the most recent template is used
+            image = Binary(compile_pattern(pattern=latex, aTemplate=a_template, verbose=verbose))
 
         data.update({
             'name': name,
@@ -124,29 +126,29 @@ class MathObject:
 
         if parent_id is not None:
             for record in new_records:
-                self.associateParent(parent_id=parent_id, child_id=record.id)
+                self.associate_parent(parent_id=parent_id, child_id=record.id, insertion_order=insertion_order)
 
         self.last_inserted = new_records[0]
         self.records.append(new_records)
 
     # Simple return statement. More sophisticated ones will have to be purpose built
-    def values_for_fields(self, whereKey: str = 'id', whereValues: tuple = None,
-                          name: bool = True, table: str = None, verbose: bool = False, **kwargs):
-        """whereKey could be 'id', 'name', etc.
+    def values_for_fields(self, where_key: str = 'id', where_values: tuple = None,
+                          name: bool = True, verbose: bool = False, **kwargs):
+        """where_key could be 'id', 'name', etc.
             For any other field, you just set the fieldname to True"""
 
         fields = ['id']
 
         if name is True:
             fields.append('name')
-        for kw in kwargs:
-            if kwargs[kw] is True:
-                fields.append(kw)
+        for a_key in kwargs:
+            if kwargs[a_key] is True:
+                fields.append(a_key)
 
         db_params = config()
         conn = connect(**db_params)
 
-        if whereValues is None:
+        if where_values is None:
             sql = "SELECT {fields} FROM {table}"
             query = SQL(sql).format(table=Identifier(self.table),
                                     fields=SQL(', ').join(map(Identifier, fields)))
@@ -155,7 +157,7 @@ class MathObject:
             sql = "SELECT {fields} from {table} where {pkey} = %s"
             query = SQL(sql).format(table=Identifier(self.table),
                                     fields=SQL(', ').join(map(Identifier, fields)),
-                                    pkey=Identifier(whereKey)
+                                    pkey=Identifier(where_key)
                                     )
 
         cur = conn.cursor(cursor_factory=NamedTupleCursor)
@@ -164,7 +166,7 @@ class MathObject:
             print('Extracting records from Table: {aTable}'.format(aTable=self.table))
 
         try:
-            cur.execute(query, whereValues)
+            cur.execute(query, where_values)
         except OperationalError as error:
             print(error)
 
@@ -175,7 +177,8 @@ class MathObject:
 
         return records
 
-    def recordCountTotal(self, verbose: bool = False) -> int:
+    def record_count_total(self, verbose: bool = False) -> int:
+        """Get the total record count for {table}""".format(table=self.table)
         sql = "SELECT COUNT(id) from {table}"
 
         query = SQL(sql).format(table=Identifier(self.table))
@@ -197,20 +200,37 @@ class MathObject:
 
         return record_count[0]
 
-    def recordCountForParent(self, parent_table: str = None, parent_record: Tuple[int, ...] = None,
-                             verbose: bool = False):
-        record_cnt: int = 0
+    def record_count_for_parent(self, parent_record: Tuple[int, ...] = None,
+                                verbose: bool = False):
+        """Return record count for Parent Table"""
+        sql = "SELECT COUNT(*) from {table} WHERE {parent_key} = %s"
 
-        records = self.recordsForParent(parentTable=parent_table, parent_record=parent_record, verbose=verbose)
+        query = SQL(sql).format(table=Identifier(self.join_table()),
+                                parent_key=Identifier(self.parent_key())
+                                )
 
-        if bool(records):
-            record_cnt: int = len(records)
+        db_params = config()
+        conn = connect(**db_params)
 
-        return record_cnt
+        cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
-    def associateParent(self, parent_id: int = None, child_id: int = None,
-                        insertion_order: int = None, inserted_by: str = None,
-                        verbose: bool = False):
+        if verbose:
+            print('Getting Count of Records in table: {table} for Group ID: {gid}'.format(table=self.join_table(),
+                  gid=parent_record))
+
+        cur.execute(query, parent_record)  # self.table))
+
+        record_count = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        return record_count[0]
+
+    def associate_parent(self, parent_id: int = None, child_id: int = None,
+                         insertion_order: int = None, inserted_by: str = None,
+                         verbose: bool = False):
+        """Associate the parent and child tables using parent id. Insertion_order and inserted_by are optional"""
         parent_key = self.parent_table + '_id'
         self_key = self.table + '_id'
 
@@ -258,18 +278,15 @@ class MathObject:
         cur.close()
         conn.close()
 
-    def recordsForParent(self, parentTable: str = None, parent_record: Tuple[int, ...] = None, verbose: bool = False):
-        parent_key = parentTable + '_id'
-
-        join_table = self.table + '_' + parentTable
-
+    def records_for_parent(self, parent_record: Tuple[int, ...] = None, verbose: bool = False):
+        """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
 
         sql = 'SELECT * FROM {table} WHERE {pkey}= %s ORDER BY insertion_order ASC;'
 
         query = SQL(sql).format(
-            table=Identifier(join_table),
-            pkey=Identifier(parent_key))
+            table=Identifier(self.join_table()),
+            pkey=Identifier(self.parent_key()))
 
         conn = connect(**db_params)
 
@@ -289,3 +306,15 @@ class MathObject:
         conn.close()
 
         return records
+
+    def parent_key(self):
+        """Parent ID String to be used as a Key in the table"""
+        return self.parent_table + '_id'
+
+    def self_key(self):
+        """Self ID String to be used as a Key in the table"""
+        return self.table + '_id'
+
+    def join_table(self):
+        """Join table which is a concatenation of the table and the parent table"""
+        return self.table + '_' + self.parent_table
