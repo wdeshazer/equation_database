@@ -54,7 +54,7 @@ class EquationGroup:
     def insert(self, name: str = None, notes: str = None, create_by: str = None, verbose: bool = False):
         db_params = config()
 
-        next_id: int = self._getNextID(verbose=verbose)
+        next_id: int = self.recordCountTotal(verbose=verbose) + 1
 
         if name is None:
             name = "{aTable} {ID:d}".format(ID=next_id, aTable=self.table)
@@ -64,7 +64,6 @@ class EquationGroup:
         # data = {'name': 'New Group', 'notes': 'I hope this works', 'created_by': 'razor'}
 
         data = {
-            'id': next_id,
             'name': name,
             'notes': notes,
             'created_by': create_by
@@ -101,24 +100,10 @@ class EquationGroup:
         self.last_inserted = new_record[0]
         self.records.append(new_record)
 
-    def record_count(self) -> int:
-        record_cnt: int = 0
+    def recordCountTotal(self, verbose: bool = False) -> int:
+        sql = "SELECT COUNT(id) from {table}"
 
-        records = self.getEquationGroupData()
-
-        if bool(records):
-            record_cnt: int = len(records)
-
-        return record_cnt
-
-    @staticmethod
-    def _getNextID(verbose: bool = False) -> int:
-        # sql = "Select nextval(pg_get_serial_sequence('{table}', 'id')) as new_id;"
-        # Normally, one would use the previous command to get the sequences name based on the table.
-        # However, all mathobjects pull tables that inherit from latex_object. I'm not sure how to
-        # find info that is associated with the parent, so I am hard wiring this. If something breaks
-        # in the future, we might want to look here.
-        sql = "Select nextval('schema_templates.latex_object_id_seq'::regclass) as new_id;"
+        query = SQL(sql).format(table=Identifier(self.table))
 
         db_params = config()
         conn = connect(**db_params)
@@ -126,13 +111,13 @@ class EquationGroup:
         cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
         if verbose:
-            print('Extracting Latest Template from Database')
+            print('Getting Count of Records in table: {table}'.format(table=self.table))
 
-        cur.execute(sql)  # self.table))
-        newID_record = cur.fetchone()
-        newID: int = newID_record.new_id
+        cur.execute(query)  # self.table))
+
+        record_count = cur.fetchone()
 
         cur.close()
         conn.close()
 
-        return newID
+        return record_count[0]

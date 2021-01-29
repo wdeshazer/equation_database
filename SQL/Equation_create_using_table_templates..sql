@@ -9,7 +9,7 @@
 -- DROP TABLE if EXISTS eqn_group CASCADE;
 -- DROP TABLE if EXISTS equation_eqn_group CASCADE;
 -- DROP TABLE if EXISTS variable CASCADE;
--- DROP TABLE if EXISTS equation_variable CASCADE;
+-- DROP TABLE if EXISTS variable_equation CASCADE;
 -- DROP TABLE IF EXISTS equation_type CASCADE;
 DROP SCHEMA IF EXISTS schema_templates CASCADE;
 DROP SCHEMA IF EXISTS public CASCADE;
@@ -27,21 +27,16 @@ CREATE TABLE template (
 );
 
 CREATE TABLE schema_templates.latex_object(
-    id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     latex TEXT NOT NULL,
     notes text, -- For a more detailed description
     image BYTEA DEFAULT NULL,
     template_id INT,
-    table_order BIGINT,
-    table_order_prev BIGINT,
     create_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     modified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by TEXT NOT NULL,
     compiled_at TIMESTAMPTZ DEFAULT NULL,
     CONSTRAINT math_object_ak_1 UNIQUE (name) NOT DEFERRABLE,
-    CONSTRAINT table_order_ak_1 UNIQUE (table_order) NOT DEFERRABLE,
-    CONSTRAINT table_order_prev_ak_1 UNIQUE (table_order_prev) NOT DEFERRABLE,
     CONSTRAINT fk_template
         FOREIGN KEY(template_id)
             REFERENCES template(id)
@@ -59,6 +54,7 @@ VALUES
 
 -- Table: Unit
 CREATE TABLE unit (
+    id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.latex_object INCLUDING ALL,
     type text NOT NULL DEFAULT 'SI',
     CONSTRAINT fk_template
@@ -66,13 +62,14 @@ CREATE TABLE unit (
             REFERENCES unit_type (type)
 );
 
-INSERT INTO unit (name, latex, table_order, table_order_prev, created_by)
+INSERT INTO unit (name, latex,created_by)
 VALUES
-    ('Unitless', '', 1, 1, 'razor'),
-    ('meter', 'm', 2, 2, 'razor');
+    ('Unitless', '', 'razor'),
+    ('meter', 'm', 'razor');
 
 CREATE TABLE schema_templates.physics_object (
     LIKE schema_templates.latex_object INCLUDING ALL,
+    dimensions int DEFAULT NULL,
     unit_id int  NOT NULL,
     CONSTRAINT fk_unit
         FOREIGN KEY(unit_id)
@@ -100,6 +97,7 @@ CREATE TABLE eqn_group (
 
 -- Table: equation
 CREATE TABLE equation (
+    id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.physics_object INCLUDING ALL,
     equation_type text  NOT NULL,
     associated_code_file text
@@ -112,12 +110,13 @@ CREATE TABLE equation_eqn_group (
     insertion_order BIGINT,
     insertion_order_prev BIGINT,
     insertion_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    inserted_by TEXT NOT NULL,
     CONSTRAINT equation_eqn_group_pk PRIMARY KEY (equation_id,eqn_group_id)
 );
 
 -- foreign keys
 -- Reference: Equation_Eqn_Group_Eqn_Group (table: Equation_Eqn_Group)
-ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_eqn_group
+ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_fk_eqn_group_id
     FOREIGN KEY (eqn_group_id)
     REFERENCES eqn_group (id)
     NOT DEFERRABLE
@@ -125,7 +124,7 @@ ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_eqn_group
 ;
 
 -- Reference: Equation_Eqn_Group_Equation (table: Equation_Eqn_Group)
-ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_equation
+ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_fk_equation_id
     FOREIGN KEY (equation_id)
     REFERENCES Equation (id)
     NOT DEFERRABLE
@@ -142,12 +141,12 @@ VALUES
     ('Conservation'),
     ('Constitutive'),
     ('Definition'),
-    ('Corration'),
+    ('Correlation'),
     ('Equality');
 
 
 -- Reference: Equation_Equation_Type (table: Equation)
-ALTER TABLE equation ADD CONSTRAINT equation_equation_type
+ALTER TABLE equation ADD CONSTRAINT equation_fk_equation_typ
     FOREIGN KEY (equation_type)
     REFERENCES equation_type (type)
     NOT DEFERRABLE
@@ -156,27 +155,44 @@ ALTER TABLE equation ADD CONSTRAINT equation_equation_type
 
 -- Table: Variable
 CREATE TABLE variable (
-    LIKE schema_templates.physics_object INCLUDING ALL
+    id BIGSERIAL PRIMARY KEY,
+    LIKE schema_templates.physics_object INCLUDING ALL,
+    variable_type text NOT NULL
 );
 
--- Table: Equation_Variable
-CREATE TABLE equation_variable (
-    variables_id int8  NOT NULL,
+-- Table: Equation_Type
+CREATE TABLE variable_type (
+    type text  PRIMARY KEY
+);
+
+INSERT INTO variable_type (type)
+VALUES
+    ('Constant'),
+    ('Coordinate'),
+    ('Field');
+
+-- Table: variable_equation
+CREATE TABLE variable_equation (
+    variable_id int8  NOT NULL,
     equation_Id int8  NOT NULL,
-    CONSTRAINT equation_variable_pk PRIMARY KEY (variables_id,equation_id)
+    insertion_order BIGINT,
+    insertion_order_prev BIGINT,
+    insertion_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    inserted_by TEXT NOT NULL,
+    CONSTRAINT variable_equation_pk PRIMARY KEY (variable_id,equation_id)
 );
 
--- Reference: Equation_Variable_Equation (table: Equation_Variable)
-ALTER TABLE equation_variable ADD CONSTRAINT equation_variable_equation
+-- Reference: variable_equation_Equation (table: variable_equation)
+ALTER TABLE variable_equation ADD CONSTRAINT variable_equation_fk_equation_id
     FOREIGN KEY (equation_id)
     REFERENCES equation (id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
 
--- Reference: Equation_Variable_Variable (table: Equation_Variable)
-ALTER TABLE equation_variable ADD CONSTRAINT equation_variable_variable
-    FOREIGN KEY (variables_id)
+-- Reference: variable_equation_Variable (table: variable_equation)
+ALTER TABLE variable_equation ADD CONSTRAINT variable_equation_fk_variable_id
+    FOREIGN KEY (variable_id)
     REFERENCES variable (id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
@@ -205,6 +221,67 @@ do $$
         INSERT INTO template (data, created_by) VALUES (pg_read_file(file_location), 'Will DeShazer');
     END
     $$;
+
+CREATE OR REPLACE FUNCTION trigger_copy_previous_insertion_order() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        new.insertion_order_prev := old.insertion_order;
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER update_eqn_order
+    BEFORE UPDATE ON equation_eqn_group
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_copy_previous_insertion_order();
+
+CREATE TRIGGER update_var_order
+    BEFORE UPDATE ON variable_equation
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_copy_previous_insertion_order();
+
+
+CREATE OR REPLACE FUNCTION trigger_insertion_order_eqn() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+        the_count integer;
+    BEGIN
+        if new.insertion_order is NULL then
+            SELECT INTO the_count COUNT(equation_id) FROM equation_eqn_group WHERE eqn_group_id = new.eqn_group_id;
+            new.insertion_order = the_count + 1;
+            new.insertion_order_prev := the_count + 1;
+        end if;
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER insert_eqn_order
+    BEFORE INSERT ON equation_eqn_group
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_insertion_order_eqn();
+
+CREATE OR REPLACE FUNCTION trigger_insertion_order_var() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    DECLARE
+        the_count integer;
+    BEGIN
+        if new.insertion_order is NULL then
+            SELECT INTO the_count COUNT(variable_id) FROM variable_equation WHERE equation_id = new.equation_id;
+            new.insertion_order = the_count + 1;
+            new.insertion_order_prev := the_count + 1;
+        end if;
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER insert_var_order
+    BEFORE INSERT ON variable_equation
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_insertion_order_var();
+
 
 -- do $$
 --     BEGIN

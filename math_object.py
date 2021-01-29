@@ -19,15 +19,17 @@ from latex_template import compile_pattern, template
 from warnings import warn
 from typing import Tuple
 
+
 class MathObject:
     """"""
-    def __init__(self, table: str):
+    def __init__(self, table: str, parent_table: str):
         """Constructor for MathObject"""
         self.table = table
-        # self.parent_table = parent  # For equations it is eqn_group. For variables it is equations
-        # self.child_table = child  # For equations -> variables, for vaiables -> nothing. eqn_group -> not math_object
+        self.parent_table = parent_table  # For equations it is eqn_group. For variables it is equations
+        self.records: list = self.allRecords()
+        self.last_inserted = None
 
-    def records(self, verbose: bool = False):
+    def allRecords(self, verbose: bool = False):
         # sql = 'SELECT * FROM {aTable}'.format(aTable=self.table)
         sql = "SELECT * FROM {tbl}"
         query = SQL(sql).format(tbl=Identifier(self.table))
@@ -52,19 +54,18 @@ class MathObject:
 
         return records
 
-    def insert(self, parentTable: str = None, name: str = None, data=None, latex: str = None, notes: str = None,
-               image: bytes = None, template_id: int = None, table_order: int = None, table_order_prev: int = None,
-               created_by: str = None, verbose: bool = None):
-
-        if parentTable is not None:
-            record_ids = self.getIDsForParent(self, parentTable=parentTable)
+    def insert(self, parent_id: int = None, name: str = None,
+               data=None, latex: str = None, notes: str = None,
+               image: bytes = None, template_id: int = None,
+               insertion_order: int = None, created_by: str = None,
+               verbose: bool = None):
 
         if data is None:
             data = {}
 
         db_params = config()
 
-        next_id: int = self._getNextID(verbose=verbose)
+        next_id: int = self.recordCountTotal(verbose=verbose) + 1
 
         if name is None:
             name = "{aTable} {ID:d}".format(ID=next_id, aTable=self.table)
@@ -82,29 +83,20 @@ class MathObject:
             # If aTemplate is None the most recent template is used
             image = Binary(compile_pattern(pattern=latex, aTemplate=aTemplate, verbose=verbose))
 
-        if table_order is None:
-            table_order = self.record_count() + 1
-
-        if table_order_prev is None:
-            table_order_prev = table_order
-
         data.update({
-            'id': next_id,
             'name': name,
             'latex': latex,
             'image': image,
             'notes': notes,
             'template_id': template_id,
-            'table_order': table_order,
-            'table_order_prev': table_order_prev,
             'created_by': created_by
         })
 
-        sql = 'INSERT INTO {table} ({fields}) VALUES ({values})'
+        sql = 'INSERT INTO {table} ({fields}) VALUES ({values}) RETURNING *'
 
         keys = data.keys()
 
-        query = SQL(sql).format(table=Identifier('equation'),
+        query = SQL(sql).format(table=Identifier(self.table),
                                 fields=SQL(', ').join(map(Identifier, keys)),
                                 values=SQL(', ').join(map(Placeholder, keys)))
 
@@ -123,10 +115,19 @@ class MathObject:
         except OperationalError as error:
             print(error)
 
+        new_records = cur.fetchall()
+
         conn.commit()
 
         cur.close()
         conn.close()
+
+        if parent_id is not None:
+            for record in new_records:
+                self.associateParent(parent_id=parent_id, child_id=record.id)
+
+        self.last_inserted = new_records[0]
+        self.records.append(new_records)
 
     # Simple return statement. More sophisticated ones will have to be purpose built
     def values_for_fields(self, whereKey: str = 'id', whereValues: tuple = None,
@@ -174,42 +175,59 @@ class MathObject:
 
         return records
 
-    def record_count(self) -> int:
+    def recordCountTotal(self, verbose: bool = False) -> int:
+        sql = "SELECT COUNT(id) from {table}"
+
+        query = SQL(sql).format(table=Identifier(self.table))
+
+        db_params = config()
+        conn = connect(**db_params)
+
+        cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+        if verbose:
+            print('Getting Count of Records in table: {table}'.format(table=self.table))
+
+        cur.execute(query)  # self.table))
+
+        record_count = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        return record_count[0]
+
+    def recordCountForParent(self, parent_table: str = None, parent_record: Tuple[int, ...] = None,
+                             verbose: bool = False):
         record_cnt: int = 0
 
-        records = self.records()
+        records = self.recordsForParent(parentTable=parent_table, parent_record=parent_record, verbose=verbose)
 
         if bool(records):
             record_cnt: int = len(records)
 
         return record_cnt
 
-    def associateParent(self, parentTable: str = None, parent_record: int = None, child_record: int = None,
-                        insertion_order: int = None, insertion_order_prev: int = None, verbose: bool = False,
-                        created_by: str = None):
-        parent_key = parentTable + '_id'
+    def associateParent(self, parent_id: int = None, child_id: int = None,
+                        insertion_order: int = None, inserted_by: str = None,
+                        verbose: bool = False):
+        parent_key = self.parent_table + '_id'
         self_key = self.table + '_id'
 
-        join_table = self.table + '_' + parentTable
+        join_table = self.table + '_' + self.parent_table
 
         db_params = config()
 
         data = {}
 
-        if created_by is None:
-            created_by = db_params['user']
-
-        if insertion_order is None:
-            insertion_order = self.record_count() + 1
-
-        if insertion_order_prev is None:
-            insertion_order_prev = insertion_order
+        if inserted_by is None:
+            inserted_by = db_params['user']
 
         data.update({
-            parent_key: parent_record,
-            self_key: child_record,
+            parent_key: parent_id,
+            self_key: child_id,
             'insertion_order': insertion_order,
-            'insertion_order_prev': insertion_order_prev
+            'inserted_by': inserted_by
         })
 
         sql = 'INSERT INTO {table} ({fields}) VALUES ({values})'
@@ -240,9 +258,8 @@ class MathObject:
         cur.close()
         conn.close()
 
-    def getIDsForParent(self, parentTable: str = None, parent_record: Tuple[int, ...] = None, verbose: bool = False):
+    def recordsForParent(self, parentTable: str = None, parent_record: Tuple[int, ...] = None, verbose: bool = False):
         parent_key = parentTable + '_id'
-        self_key = self.table + '_id'
 
         join_table = self.table + '_' + parentTable
 
@@ -272,29 +289,3 @@ class MathObject:
         conn.close()
 
         return records
-
-    @staticmethod
-    def _getNextID(verbose: bool = False) -> int:
-        # sql = "Select nextval(pg_get_serial_sequence('{table}', 'id')) as new_id;"
-        # Normally, one would use the previous command to get the sequences name based on the table.
-        # However, all mathobjects pull tables that inherit from latex_object. I'm not sure how to
-        # find info that is associated with the parent, so I am hard wiring this. If something breaks
-        # in the future, we might want to look here.
-        sql = "Select nextval('schema_templates.latex_object_id_seq'::regclass) as new_id;"
-
-        db_params = config()
-        conn = connect(**db_params)
-
-        cur = conn.cursor(cursor_factory=NamedTupleCursor)
-
-        if verbose:
-            print('Extracting Latest Template from Database')
-
-        cur.execute(sql)  # self.table))
-        newID_record = cur.fetchone()
-        newID: int = newID_record.new_id
-
-        cur.close()
-        conn.close()
-
-        return newID
