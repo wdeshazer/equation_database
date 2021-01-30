@@ -8,6 +8,7 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
+from collections import defaultdict
 from psycopg2.sql import SQL, Identifier, Placeholder
 from psycopg2 import connect, OperationalError
 from psycopg2.extras import NamedTupleCursor
@@ -26,7 +27,7 @@ class EquationGroup:
         self.records: list = self.get_equation_group_data()
         self.last_inserted = None
 
-    def get_equation_group_data(self, verbose=False):
+    def get_equation_group_data(self, as_columns: bool = True, verbose: bool = False):
         """Method to pull data from database"""
         sql = "SELECT * FROM {tbl}"
         query = SQL(sql).format(tbl=Identifier(self.table))
@@ -45,6 +46,9 @@ class EquationGroup:
             print(error)
 
         records = cur.fetchall()
+
+        if as_columns is True:
+            records = self.as_columns(records)
 
         cur.close()
         conn.close()
@@ -98,8 +102,21 @@ class EquationGroup:
         cur.close()
         conn.close()
 
-        self.last_inserted = new_record[0]
+        self.last_inserted = self.as_columns(new_record)
         self.records.append(new_record)
+
+    def append(self, new_records):
+        """Append new records to existing records. Because the data is stored as a dictionary instead of
+        NamedTuples, it requires a helper function to append new data"""
+        res = self.records
+
+        for data in new_records:
+            # noinspection PyProtectedMember
+            record: dict = data._asdict()
+            for key, value in record.items():
+                res[key].append(value)
+
+        self.records = res
 
     def record_count_total(self, verbose: bool = False) -> int:
         """Method to get total number of eqn_groups"""
@@ -123,3 +140,14 @@ class EquationGroup:
         conn.close()
 
         return record_count[0]
+
+    @staticmethod
+    def as_columns(records):
+        """Helper function to turn NameTuple records into column-like dictionaries"""
+        res = defaultdict(list)
+
+        for data in records:
+            record: dict = data._asdict()
+            for key, value in record.items():
+                res[key].append(value)
+        return res
