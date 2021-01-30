@@ -27,10 +27,10 @@ class MathObject:
         """Constructor for MathObject"""
         self.table = table
         self.parent_table = parent_table  # For equations it is eqn_group. For variables it is equations
-        self.records: list = self.all_records()
+        self.records: dict = self.all_records()
         self.last_inserted = None
 
-    def all_records(self, as_columns: bool = False, verbose: bool = False):
+    def all_records(self, as_columns: bool = True, verbose: bool = False):
         """Returns all records for math_object"""
         # sql = 'SELECT * FROM {aTable}'.format(aTable=self.table)
         sql = "SELECT * FROM {tbl}"
@@ -55,7 +55,7 @@ class MathObject:
         conn.close()
 
         if as_columns is True:
-            records = self.columnify(records)
+            records = self.as_columns(records)
 
         return records
 
@@ -133,15 +133,25 @@ class MathObject:
                 self.associate_parent(parent_id=parent_id, child_id=record.id, insertion_order=insertion_order)
 
         self.last_inserted = new_records[0]
-        self.records.append(new_records)
 
-    def records_as_columns(self):
-        """Returns the value of self.records as dictionary in column style format"""
-        return self.columnify(self.records)
+        self.append(new_records)
+
+    def append(self, new_records):
+        """Append new records to existing records. Because the data is stored as a dictionary instead of
+        NamedTuples, it requires a helper function to append new data"""
+        res = self.records
+
+        for data in new_records:
+            # noinspection PyProtectedMember
+            record: dict = data._asdict()
+            for key, value in record.items():
+                res[key].append(value)
+
+        self.records = res
 
     # Simple return statement. More sophisticated ones will have to be purpose built
-    def values_for_fields(self, where_key: str = 'id', where_values: tuple = None,
-                          name: bool = True, verbose: bool = False, **kwargs):
+    def values_for_fields(self, where_key: str = 'id', where_values: Tuple[int, ...] = None,
+                          name: bool = True, as_column: bool = True, verbose: bool = False, **kwargs):
         """where_key could be 'id', 'name', etc.
             For any other field, you just set the fieldname to True"""
 
@@ -160,13 +170,16 @@ class MathObject:
             sql = "SELECT {fields} FROM {table}"
             query = SQL(sql).format(table=Identifier(self.table),
                                     fields=SQL(', ').join(map(Identifier, fields)))
-            print(query.as_string(conn))
+            if verbose:
+                print(query.as_string(conn))
         else:
-            sql = "SELECT {fields} from {table} where {pkey} = %s"
+            sql = "SELECT {fields} from {table} where {pkey} IN %s"
             query = SQL(sql).format(table=Identifier(self.table),
                                     fields=SQL(', ').join(map(Identifier, fields)),
                                     pkey=Identifier(where_key)
                                     )
+            if verbose:
+                print(query.as_string(conn))
 
         cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
@@ -182,6 +195,9 @@ class MathObject:
 
         cur.close()
         conn.close()
+
+        if as_column is True:
+            records = self.as_columns(records)
 
         return records
 
@@ -211,7 +227,7 @@ class MathObject:
     def record_count_for_parent(self, parent_id: Tuple[int, ...] = None,
                                 verbose: bool = False):
         """Return record count for Parent Table"""
-        sql = "SELECT COUNT(*) from {table} WHERE {parent_key} = %s"
+        sql = "SELECT COUNT(*) from {table} WHERE {parent_key} IN %s"
 
         query = SQL(sql).format(table=Identifier(self.join_table()),
                                 parent_key=Identifier(self.parent_key())
@@ -289,12 +305,12 @@ class MathObject:
         cur.close()
         conn.close()
 
-    def records_for_parent(self, parent_id: Tuple[int, ...] = None, as_columns: bool = False,
+    def records_for_parent(self, parent_id: Tuple[int, ...] = None, as_columns: bool = True,
                            verbose: bool = False):
         """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
 
-        sql = 'SELECT * FROM {table} WHERE {pkey}= %s ORDER BY insertion_order ASC;'
+        sql = 'SELECT * FROM {table} WHERE {pkey} IN %s ORDER BY insertion_order ASC;'
 
         query = SQL(sql).format(
             table=Identifier(self.join_table()),
@@ -320,9 +336,27 @@ class MathObject:
         conn.close()
 
         if as_columns is True:
-            records = self.columnify(records)
+            records = self.as_columns(records)
 
         return records
+
+    def id_for_records_not_in_parent(self, parent_id: Tuple[int, ...], verbose: bool = False):
+        """Returns dictionary with ids and indexes of items not in the parent group.
+        The indexes can be used with self.records"""
+        ids_for_all_records = self.records['id']
+
+        records_in_parent_table = self.records_for_parent(parent_id=parent_id, verbose=verbose)
+
+        record_ids_in_parent_table = records_in_parent_table[self.self_key()]
+
+        record_ids_not_in_parent = list(set(ids_for_all_records) - set(record_ids_in_parent_table))
+
+        result = {
+            'ids': record_ids_not_in_parent,
+            'indexes': [ids_for_all_records.index(x) for x in record_ids_not_in_parent]
+        }
+
+        return result
 
     def parent_key(self):
         """Parent ID String to be used as a Key in the table"""
@@ -339,13 +373,12 @@ class MathObject:
     # NamedTuple uses underscores to prevent name collision _make, _replace, _asdict, _fields
     # noinspection PyProtectedMember
     @staticmethod
-    def columnify(records):
+    def as_columns(records):
         """Helper function to turn NameTuple records into column-like dictionaries"""
         res = defaultdict(list)
 
         for data in records:
             record = data._asdict()
             for key, value in record.items():
-                print(key)
                 res[key].append(value)
         return res
