@@ -8,26 +8,26 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-from config import config
 from psycopg2.sql import SQL, Identifier, Placeholder
 from psycopg2 import connect, OperationalError
 from psycopg2.extras import NamedTupleCursor
+from config import config
 
 
 class NoRecordIDWarning(UserWarning):
-    pass
+    """UserWarning for EquationGroup"""
 
 
 class EquationGroup:
-    """"""
+    """Class for managing and interfacing with Postgres Table eqn_group"""
     def __init__(self):
-        """Constructor for MathObject"""
+        """Constructor for eqn_group"""
         self.table = 'eqn_group'
-        self.eqn_table = 'equation_eqn_group'
-        self.records: list = self.getEquationGroupData()
+        self.records: list = self.get_equation_group_data()
         self.last_inserted = None
 
-    def getEquationGroupData(self, verbose=False):
+    def get_equation_group_data(self, verbose=False):
+        """Method to pull data from database"""
         sql = "SELECT * FROM {tbl}"
         query = SQL(sql).format(tbl=Identifier(self.table))
 
@@ -52,9 +52,10 @@ class EquationGroup:
         return records
 
     def insert(self, name: str = None, notes: str = None, create_by: str = None, verbose: bool = False):
+        """Method to Insert New Equation Records"""
         db_params = config()
 
-        next_id: int = self.recordCountTotal(verbose=verbose) + 1
+        next_id: int = self.record_count_total(verbose=verbose) + 1
 
         if name is None:
             name = "{aTable} {ID:d}".format(ID=next_id, aTable=self.table)
@@ -100,7 +101,8 @@ class EquationGroup:
         self.last_inserted = new_record[0]
         self.records.append(new_record)
 
-    def recordCountTotal(self, verbose: bool = False) -> int:
+    def record_count_total(self, verbose: bool = False) -> int:
+        """Method to get total number of eqn_groups"""
         sql = "SELECT COUNT(id) from {table}"
 
         query = SQL(sql).format(table=Identifier(self.table))
