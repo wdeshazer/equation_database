@@ -13,12 +13,16 @@ __license__ = "MIT"
 
 from typing import Tuple
 from collections import defaultdict
+from warnings import warn
 from psycopg2.sql import SQL, Identifier, Placeholder
 from psycopg2 import connect, OperationalError, Binary
 from psycopg2.extras import NamedTupleCursor
 from latex_template import compile_pattern, template
 from config import config
-# from warnings import warn
+
+
+class RecordIDTypeError(UserWarning):
+    """UserWarning for EquationGroup"""
 
 
 class MathObject:
@@ -309,8 +313,14 @@ class MathObject:
                            verbose: bool = False):
         """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
+        sql = ''
 
-        sql = 'SELECT * FROM {table} WHERE {pkey} IN %s ORDER BY insertion_order ASC;'
+        if isinstance(parent_id, int):
+            sql = 'SELECT * FROM {table} WHERE {pkey}= %s ORDER BY insertion_order ASC;'
+        elif isinstance(parent_id, tuple):
+            sql = 'SELECT * FROM {table} WHERE {pkey} IN %s ORDER BY insertion_order ASC;'
+        else:
+            warn("parent_id type not recognized", RecordIDTypeError)
 
         query = SQL(sql).format(
             table=Identifier(self.join_table()),
@@ -318,15 +328,19 @@ class MathObject:
 
         conn = connect(**db_params)
 
-        if verbose:
-            print(query.as_string(conn))
-
         cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
+        if verbose:
+            print(query.as_string(conn))
+            if isinstance(parent_id, int):
+                cur.mogrify(query, parent_id)
+            elif isinstance(parent_id, tuple):
+                cur.mogrify(query, (parent_id, ))
+
         try:
-            cur.execute(query, parent_id)
+            cur.execute(query, (parent_id, ))
         except TypeError:
-            cur.execute(query, (parent_id,))
+            cur.execute(query, parent_id)
         except OperationalError as error:
             print(error)
 
