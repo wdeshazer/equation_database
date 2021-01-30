@@ -136,7 +136,7 @@ class MathObject:
             for record in new_records:
                 self.associate_parent(parent_id=parent_id, child_id=record.id, insertion_order=insertion_order)
 
-        self.last_inserted = new_records[0]
+        self.last_inserted = self.as_columns(new_records)
 
         self.append(new_records)
 
@@ -231,7 +231,14 @@ class MathObject:
     def record_count_for_parent(self, parent_id: Tuple[int, ...] = None,
                                 verbose: bool = False):
         """Return record count for Parent Table"""
-        sql = "SELECT COUNT(*) from {table} WHERE {parent_key} IN %s"
+        sql = ''
+
+        if isinstance(parent_id, tuple):
+            sql = "SELECT COUNT(*) from {table} WHERE {parent_key} IN %s"
+        elif isinstance(parent_id, int):
+            sql = "SELECT COUNT(*) from {table} WHERE {parent_key}= %s"
+        else:
+            warn("Unrecognized type for parent_id", RecordIDTypeError)
 
         query = SQL(sql).format(table=Identifier(self.join_table()),
                                 parent_key=Identifier(self.parent_key())
@@ -245,11 +252,18 @@ class MathObject:
         if verbose:
             print('Getting Count of Records in table: {table} for Group ID: {gid}'.format(table=self.join_table(),
                                                                                           gid=parent_id))
+            print(query.as_string(conn))
+            if isinstance(parent_id, int):
+                cur.mogrify(query, parent_id)
+            elif isinstance(parent_id, tuple):
+                cur.mogrify(query, (parent_id, ))
 
         try:
-            cur.execute(query, parent_id)  # self.table))
-        except TypeError:
             cur.execute(query, (parent_id,))
+        except TypeError:
+            cur.execute(query, parent_id)  # self.table))
+        except OperationalError as error:
+            print(error)
 
         record_count = cur.fetchone()
 
