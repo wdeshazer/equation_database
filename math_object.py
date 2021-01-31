@@ -73,8 +73,8 @@ class MathObject:
 
     def insert(self, parent_id: int = None, name: str = None,
                data=None, latex: str = None, notes: str = None,
-               image: bytes = None, template_id: int = None,
-               insertion_order: int = None, created_by: str = None,
+               image: bytes = None, template_id: int = None, dimensions: int = 1,
+               insertion_order: int = None, created_by: str = None, unit_id: int = 1,
                verbose: bool = None):
         """Insert New Record Into math_object"""
 
@@ -106,6 +106,8 @@ class MathObject:
             'latex': latex,
             'image': image,
             'notes': notes,
+            'dimensions': dimensions,
+            'unit_id': unit_id,
             'template_id': template_id,
             'created_by': created_by
         })
@@ -149,8 +151,8 @@ class MathObject:
         self.append(new_records)
 
     def update(self, an_id: id = None, where_key: str = 'id', name: str = None,
-               data=None, latex: str = None, notes: str = None,
-               image: bytes = None, template_id: int = None,
+               data=None, latex: str = None, notes: str = None, unit_id: int = None,
+               image: bytes = None, template_id: int = None, dimensions: int = None,
                modified_by: str = None, created_by: str = None,
                verbose: bool = None):
         """Insert New Record Into math_object"""
@@ -166,6 +168,8 @@ class MathObject:
             data.update(self._add_field('name', name))
             data.update(self._add_field('notes', notes))
             data.update(self._process_latex(latex, image, template_id, verbose))
+            data.update(self._add_field('dimensions', dimensions))
+            data.update(self._add_field('unit_id', unit_id))
             data.update(self._add_field('created_by', created_by))
 
             # If there is no data, then skip. Of course one could still change modified by:
@@ -248,7 +252,7 @@ class MathObject:
         return data
 
     @staticmethod
-    def _add_field(key: str = None, value = None):
+    def _add_field(key: str = None, value=None):
         data = {}
         if value is not None:
             data = {key: value}

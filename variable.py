@@ -1,5 +1,5 @@
 """
-Varible Provides helper functions for pulling the LaTeX template from the equations database
+Variable Provides helper functions for managing variables and their associations
 """
 
 __author__ = "William DeShazer"
@@ -19,5 +19,10 @@ class Variable(MathObject):
     # pylint: disable=arguments-differ
     def insert(self, *args, unit_id: int = 1, var_type: str = 'Constant', dimensions: int = 1, **kwargs):
         """Insert new Variable Record"""
-        data = {'unit_id': unit_id, 'variable_type': var_type, 'dimensions': dimensions}
+        data = {'variable_type': var_type}
         super().insert(*args, data=data, **kwargs)
+
+    def update(self, *args, var_type: str = None, **kwargs):
+        data = {}
+        data.update(super()._add_field('var_type', var_type))
+        super().update(*args, data=data, **kwargs)
