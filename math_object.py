@@ -25,6 +25,14 @@ class RecordIDTypeError(UserWarning):
     """UserWarning for EquationGroup"""
 
 
+class ImageWithoutTemplateIDError(UserWarning):
+    """UserWarning for EquationGroup"""
+
+
+class NoRecordIDError(UserWarning):
+    """UserWarning for EquationGroup"""
+
+
 class MathObject:
     """Base class for Equations, Variables, and Units"""
     def __init__(self, table: str, parent_table: str):
@@ -147,85 +155,103 @@ class MathObject:
                verbose: bool = None):
         """Insert New Record Into math_object"""
 
-        if data is None:
-            data = {}
+        if an_id is None:
+            warn("No Record ID Specified", NoRecordIDError)
+        else:
+            if data is None:
+                data = {}
 
-        db_params = config()
+            db_params = config()
 
-        if name is not None:
-            data.update(name=name)
+            if name is not None:
+                data.update(name=name)
 
-        if notes is not None:
-            data.update(notes=notes)
+            if notes is not None:
+                data.update(notes=notes)
 
-        the_template = template(version=template_id, verbose=verbose)
-        a_template = the_template.data
-        template_id = the_template.id
+            data.update(self._process_latex(latex, image, template_id, verbose))
 
-        if latex is not None and image is not None:
-            data.update(latex=latex, image=image)
-        elif latex is not None and image is None:
-            image = Binary(compile_pattern(pattern=latex, aTemplate=a_template, verbose=verbose))
-            data.update(latex=latex, image=image)
-        elif image is not None:
-            data.update(image=image)
+            if created_by is not None:
+                data.update(created_by=created_by)
 
-        if created_by is not None:
-            data.update(created_by=created_by)
+            # If there is no data, then skip. Of course one could still change modified by:
+            if len(data) > 0 or modified_by is not None:
 
-        # If there is no data, then skip. Of course one could still change modified by:
-        if len(data) > 0 or modified_by is not None:
+                # Always require a modified by and because one can change data without specifying a modifer,
+                # this is necessary. We don't check it before the previous if, because we don't want to create
+                # a modified_by if not data was set and no modified_by was set.
+                if modified_by is None:
+                    modified_by = db_params['user']
 
-            # Always require a modified by and because one can change data without specifying a modifer,
-            # this is necessary. We don't check it before the previous if, because we don't want to create
-            # a modified_by if not data was set and no modified_by was set.
-            if modified_by is None:
-                modified_by = db_params['user']
+                data.update(modified_by=modified_by)
 
-            data.update(modified_by=modified_by)
+                fields = data.keys()
 
-            fields = data.keys()
+                sql = "UPDATE {table} SET {fields} WHERE {pkey} = {a_value} RETURNING *"
 
-            sql = "UPDATE {table} SET {fields} WHERE {pkey} = {a_value} RETURNING *"
+                query = SQL(sql).format(table=Identifier(self.table),
+                                        fields=SQL(', ').join(
+                                            Composed([Identifier(k), SQL(' = '), Placeholder(k)]) for k in fields
+                                        ),
+                                        pkey=Identifier(where_key),
+                                        a_value=Placeholder('where_key')
+                                        )
 
-            query = SQL(sql).format(table=Identifier(self.table),
-                                    fields=SQL(', ').join(
-                                        Composed([Identifier(k), SQL(' = '), Placeholder(k)]) for k in fields
-                                    ),
-                                    pkey=Identifier(where_key),
-                                    a_value=Placeholder('where_key')
-                                    )
+                data.update(where_key=an_id)
 
-            data.update(where_key=an_id)
+                conn = connect(**db_params)
+                cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
-            conn = connect(**db_params)
-            cur = conn.cursor(cursor_factory=NamedTupleCursor)
+                if verbose:
+                    print(query.as_string(conn))
+                    print(cur.mogrify(query, data))
 
-            if verbose:
-                print(query.as_string(conn))
-                print(cur.mogrify(query, data))
-                # if isinstance(an_id, int):
-                #     cur.mogrify(query, an_id)
-                # elif isinstance(an_id, tuple):
-                #     cur.mogrify(query, (an_id,))
+                try:
+                    cur.execute(query, data)
+                except OperationalError as error:
+                    print(error)
 
-            try:
-                cur.execute(query, data)
-            # except TypeError:
-            #     cur.execute(query, an_id)
-            except OperationalError as error:
-                print(error)
+                new_record = cur.fetchall()
 
-            new_record = cur.fetchall()
+                conn.commit()
 
-            conn.commit()
+                cur.close()
+                conn.close()
 
-            cur.close()
-            conn.close()
+                self.last_inserted = self.as_columns(new_record)
 
-            self.last_inserted = self.as_columns(new_record)
+                self.records = self.all_records()
 
-            self.records = self.all_records()
+    @staticmethod
+    def _process_latex(latex, image, template_id, verbose: bool = False):
+        """Helper function to process latex, image and template_id flags"""
+        data = {}
+
+        if latex is not None or image is not None or template_id is not None:
+
+            only_template_changed = template_id is not None and latex is None and image is None
+            only_latex_changed = latex is not None and image is None  # regardless of template_id state
+            # always need template_id when image is manually changed
+            acceptable_image_change = image is not None and template_id is not None
+
+            recompile = only_latex_changed or only_template_changed
+            if recompile:
+                the_template = template(version=template_id, verbose=verbose)
+                a_template = the_template.data
+                template_id = the_template.id
+                image = Binary(compile_pattern(pattern=latex, aTemplate=a_template, verbose=verbose))
+
+                data.update(image=image, template_id=template_id)
+                if only_latex_changed:
+                    data.update(latex=latex)
+            elif acceptable_image_change:
+                # Note if template_id is not specified
+                data.update(image=image, template_id=template_id)
+                if latex is not None:
+                    data.update(latex=latex)
+            else:
+                warn('User Input Images must also specify template used', ImageWithoutTemplateIDError)
+        return data
 
     def append(self, new_records):
         """Append new records to existing records. Because the data is stored as a dictionary instead of
