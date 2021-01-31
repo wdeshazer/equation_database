@@ -4,7 +4,7 @@ math_object Provides helper functions for pulling the LaTeX template from the eq
 update method: https://stackoverflow.com/questions/34774409/build-a-dynamic-update-query-in-psycopg2
 https://www.psycopg.org/docs/sql.html#
 Type Hinting Tuple: https://stackoverflow.com/questions/47533787/typehinting-tuples-in-python
-
+Update borrowed from: https://stackoverflow.com/questions/34774409/build-a-dynamic-update-query-in-psycopg2
 """
 
 __author__ = "William DeShazer"
@@ -14,7 +14,7 @@ __license__ = "MIT"
 from typing import Tuple
 from collections import defaultdict
 from warnings import warn
-from psycopg2.sql import SQL, Identifier, Placeholder
+from psycopg2.sql import SQL, Identifier, Placeholder, Composed
 from psycopg2 import connect, OperationalError, Binary
 from psycopg2.extras import NamedTupleCursor
 from latex_template import compile_pattern, template
@@ -139,6 +139,93 @@ class MathObject:
         self.last_inserted = self.as_columns(new_records)
 
         self.append(new_records)
+
+    def update(self, an_id: id = None, where_key: str = 'id', name: str = None,
+               data=None, latex: str = None, notes: str = None,
+               image: bytes = None, template_id: int = None,
+               modified_by: str = None, created_by: str = None,
+               verbose: bool = None):
+        """Insert New Record Into math_object"""
+
+        if data is None:
+            data = {}
+
+        db_params = config()
+
+        if name is not None:
+            data.update(name=name)
+
+        if notes is not None:
+            data.update(notes=notes)
+
+        the_template = template(version=template_id, verbose=verbose)
+        a_template = the_template.data
+        template_id = the_template.id
+
+        if latex is not None and image is not None:
+            data.update(latex=latex, image=image)
+        elif latex is not None and image is None:
+            image = Binary(compile_pattern(pattern=latex, aTemplate=a_template, verbose=verbose))
+            data.update(latex=latex, image=image)
+        elif image is not None:
+            data.update(image=image)
+
+        if created_by is not None:
+            data.update(created_by=created_by)
+
+        # If there is no data, then skip. Of course one could still change modified by:
+        if len(data) > 0 or modified_by is not None:
+
+            # Always require a modified by and because one can change data without specifying a modifer,
+            # this is necessary. We don't check it before the previous if, because we don't want to create
+            # a modified_by if not data was set and no modified_by was set.
+            if modified_by is None:
+                modified_by = db_params['user']
+
+            data.update(modified_by=modified_by)
+
+            fields = data.keys()
+
+            sql = "UPDATE {table} SET {fields} WHERE {pkey} = {a_value} RETURNING *"
+
+            query = SQL(sql).format(table=Identifier(self.table),
+                                    fields=SQL(', ').join(
+                                        Composed([Identifier(k), SQL(' = '), Placeholder(k)]) for k in fields
+                                    ),
+                                    pkey=Identifier(where_key),
+                                    a_value=Placeholder('where_key')
+                                    )
+
+            data.update(where_key=an_id)
+
+            conn = connect(**db_params)
+            cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+            if verbose:
+                print(query.as_string(conn))
+                print(cur.mogrify(query, data))
+                # if isinstance(an_id, int):
+                #     cur.mogrify(query, an_id)
+                # elif isinstance(an_id, tuple):
+                #     cur.mogrify(query, (an_id,))
+
+            try:
+                cur.execute(query, data)
+            # except TypeError:
+            #     cur.execute(query, an_id)
+            except OperationalError as error:
+                print(error)
+
+            new_record = cur.fetchall()
+
+            conn.commit()
+
+            cur.close()
+            conn.close()
+
+            self.last_inserted = self.as_columns(new_record)
+
+            self.records = self.all_records()
 
     def append(self, new_records):
         """Append new records to existing records. Because the data is stored as a dictionary instead of
