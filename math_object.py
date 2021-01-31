@@ -163,16 +163,10 @@ class MathObject:
 
             db_params = config()
 
-            if name is not None:
-                data.update(name=name)
-
-            if notes is not None:
-                data.update(notes=notes)
-
+            data.update(self._add_field('name', name))
+            data.update(self._add_field('notes', notes))
             data.update(self._process_latex(latex, image, template_id, verbose))
-
-            if created_by is not None:
-                data.update(created_by=created_by)
+            data.update(self._add_field('created_by', created_by))
 
             # If there is no data, then skip. Of course one could still change modified by:
             if len(data) > 0 or modified_by is not None:
@@ -251,6 +245,13 @@ class MathObject:
                     data.update(latex=latex)
             else:
                 warn('User Input Images must also specify template used', ImageWithoutTemplateIDError)
+        return data
+
+    @staticmethod
+    def _add_field(key: str = None, value = None):
+        data = {}
+        if value is not None:
+            data = {key: value}
         return data
 
     def append(self, new_records):
