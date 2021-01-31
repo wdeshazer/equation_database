@@ -9,13 +9,14 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 from collections import defaultdict
-from psycopg2.sql import SQL, Identifier, Placeholder
+from warnings import warn
+from psycopg2.sql import SQL, Identifier, Placeholder, Composed
 from psycopg2 import connect, OperationalError
 from psycopg2.extras import NamedTupleCursor
 from config import config
 
 
-class NoRecordIDWarning(UserWarning):
+class NoRecordIDError(UserWarning):
     """UserWarning for EquationGroup"""
 
 
@@ -24,7 +25,7 @@ class EquationGroup:
     def __init__(self):
         """Constructor for eqn_group"""
         self.table = 'eqn_group'
-        self.records: list = self.get_equation_group_data()
+        self.records: dict = self.get_equation_group_data()
         self.last_inserted = None
 
     def get_equation_group_data(self, as_columns: bool = True, verbose: bool = False):
@@ -55,7 +56,8 @@ class EquationGroup:
 
         return records
 
-    def insert(self, name: str = None, notes: str = None, create_by: str = None, verbose: bool = False):
+    def insert(self, name: str = None, notes: str = None, create_by: str = None,
+               verbose: bool = False):
         """Method to Insert New Equation Records"""
         db_params = config()
 
@@ -103,7 +105,77 @@ class EquationGroup:
         conn.close()
 
         self.last_inserted = self.as_columns(new_record)
-        self.records.append(new_record)
+        self.append(new_record)
+
+    def update(self, an_id: id = None, where_key: str = 'id', name: str = None,
+               data=None, notes: str = None, modified_by: str = None, created_by: str = None,
+               verbose: bool = None):
+        """Insert New Record Into math_object"""
+
+        if an_id is None:
+            warn("No Record ID Specified", NoRecordIDError)
+        else:
+            if data is None:
+                data = {}
+
+            db_params = config()
+
+            if name is not None:
+                data.update(name=name)
+
+            if notes is not None:
+                data.update(notes=notes)
+
+            if created_by is not None:
+                data.update(created_by=created_by)
+
+            # If there is no data, then skip. Of course one could still change modified by:
+            if len(data) > 0 or modified_by is not None:
+
+                # Always require a modified by and because one can change data without specifying a modifer,
+                # this is necessary. We don't check it before the previous if, because we don't want to create
+                # a modified_by if not data was set and no modified_by was set.
+                if modified_by is None:
+                    modified_by = db_params['user']
+
+                data.update(modified_by=modified_by)
+
+                fields = data.keys()
+
+                sql = "UPDATE {table} SET {fields} WHERE {pkey} = {a_value} RETURNING *"
+
+                query = SQL(sql).format(table=Identifier(self.table),
+                                        fields=SQL(', ').join(
+                                            Composed([Identifier(k), SQL(' = '), Placeholder(k)]) for k in fields
+                                        ),
+                                        pkey=Identifier(where_key),
+                                        a_value=Placeholder('where_key')
+                                        )
+
+                data.update(where_key=an_id)
+
+                conn = connect(**db_params)
+                cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+                if verbose:
+                    print(query.as_string(conn))
+                    print(cur.mogrify(query, data))
+
+                try:
+                    cur.execute(query, data)
+                except OperationalError as error:
+                    print(error)
+
+                new_record = cur.fetchall()
+
+                conn.commit()
+
+                cur.close()
+                conn.close()
+
+                self.last_inserted = self.as_columns(new_record)
+
+                self.records = self.get_equation_group_data()
 
     def append(self, new_records):
         """Append new records to existing records. Because the data is stored as a dictionary instead of
