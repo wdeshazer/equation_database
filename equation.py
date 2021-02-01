@@ -27,3 +27,14 @@ class Equation(MathObject):
         data = {}
         data.update(super()._add_field('eq_type', eq_type))
         super().update(*args, data=data, **kwargs)
+
+    def associate_parent(self, parent_id: int = None, child_id: int = None,
+                         insertion_order: int = None, inserted_by: str = None,
+                         code_file_path: str = None,  data: dict = None, verbose: bool = False):
+
+        if code_file_path is not None:
+            data = dict(code_file_path=code_file_path)
+
+        super().associate_parent(parent_id=parent_id, child_id=child_id,
+                                 insertion_order=insertion_order, inserted_by=inserted_by,
+                                 data=data, verbose=verbose)

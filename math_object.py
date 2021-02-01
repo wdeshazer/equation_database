@@ -392,7 +392,7 @@ class MathObject:
 
     def associate_parent(self, parent_id: int = None, child_id: int = None,
                          insertion_order: int = None, inserted_by: str = None,
-                         verbose: bool = False):
+                         data: dict = None, verbose: bool = False):
         """Associate the parent and child tables using parent id. Insertion_order and inserted_by are optional"""
         parent_key = self.parent_table + '_id'
         self_key = self.table + '_id'
@@ -401,17 +401,17 @@ class MathObject:
 
         db_params = config()
 
-        data = {}
+        if data is None:
+            data = {}
 
         if inserted_by is None:
             inserted_by = db_params['user']
 
-        data.update({
-            parent_key: parent_id,
-            self_key: child_id,
-            'insertion_order': insertion_order,
-            'inserted_by': inserted_by
-        })
+        data.update(
+            {parent_key: parent_id, self_key: child_id},
+            insertion_order=insertion_order,
+            inserted_by=inserted_by
+        )
 
         sql = 'INSERT INTO {table} ({fields}) VALUES ({values})'
 
