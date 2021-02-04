@@ -24,6 +24,7 @@ class EquationGroup:
         self.table = 'eqn_group'
         self.records: dict = self.get_equation_group_data()
         self.last_inserted = None
+        self.id_name = self.table + '_id'
 
     def get_equation_group_data(self, as_columns: bool = True, verbose: bool = False):
         """Method to pull data from database"""
