@@ -158,7 +158,7 @@ def append(existing_records: dict = None, new_records: Union[NamedTuple, dict] =
 
 def record_count_total(table: str = None, verbose: bool = False) -> int:
     """Method to get total number of eqn_groups"""
-    sql = "SELECT COUNT(id) from {table}"
+    sql = "SELECT COUNT(*) from {table}"
 
     query = SQL(sql).format(table=Identifier(table))
 
@@ -192,8 +192,11 @@ def columnify(records):
     """Helper function to turn NameTuple records into column-like dictionaries"""
     res = defaultdict(list)
 
+    # https://gist.github.com/pylover/7870c235867cf22817ac5b096defb768
     for data in records:
-        record: dict = data._asdict()
+
+        # noinspection PyProtectedMember
+        record = data._asdict()  # type: dict
         for key, value in record.items():
             res[key].append(value)
     return res
