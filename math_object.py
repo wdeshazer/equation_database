@@ -41,6 +41,7 @@ class MathObject:
         self.parent_table = parent_table  # For equations it is eqn_group. For variables it is equations
         self.records: dict = self.all_records()
         self.last_inserted = None
+        self.id_name = self.table + "_id"
 
     def all_records(self, as_columns: bool = True, verbose: bool = False):
         """Returns all records for math_object"""
@@ -150,12 +151,15 @@ class MathObject:
 
         self.append(new_records)
 
-    def update(self, an_id: id = None, where_key: str = 'id', name: str = None,
+    def update(self, an_id: id = None, where_key: str = None, name: str = None,
                data=None, latex: str = None, notes: str = None, unit_id: int = None,
                image: bytes = None, template_id: int = None, dimensions: int = None,
                modified_by: str = None, created_by: str = None,
                verbose: bool = None):
         """Insert New Record Into math_object"""
+
+        if where_key is None:
+            where_key = self.id_name
 
         if an_id is None:
             warn("No Record ID Specified", NoRecordIDError)
@@ -272,12 +276,14 @@ class MathObject:
         self.records = res
 
     # Simple return statement. More sophisticated ones will have to be purpose built
-    def values_for_fields(self, where_key: str = 'id', where_values: Tuple[int, ...] = None,
+    def values_for_fields(self, where_key: str = None, where_values: Tuple[int, ...] = None,
                           name: bool = True, as_column: bool = True, verbose: bool = False, **kwargs):
         """where_key could be 'id', 'name', etc.
             For any other field, you just set the fieldname to True"""
 
-        fields = ['id']
+        if where_key is None:
+            where_key = self.id_name
+        fields = [self.id_name]
 
         if name is True:
             fields.append('name')
@@ -325,7 +331,7 @@ class MathObject:
 
     def record_count_total(self, verbose: bool = False) -> int:
         """Get the total record count for {table}""".format(table=self.table)
-        sql = "SELECT COUNT(id) from {table}"
+        sql = "SELECT COUNT(*) from {table}"
 
         query = SQL(sql).format(table=Identifier(self.table))
 
@@ -445,18 +451,16 @@ class MathObject:
                            verbose: bool = False):
         """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
-        sql = ''
 
-        if isinstance(parent_id, int):
-            sql = 'SELECT * FROM {table} WHERE {pkey}= %s ORDER BY insertion_order ASC;'
-        elif isinstance(parent_id, tuple):
-            sql = 'SELECT * FROM {table} WHERE {pkey} IN %s ORDER BY insertion_order ASC;'
-        else:
-            warn("parent_id type not recognized", RecordIDTypeError)
+        sql = "SELECT * FROM {child_table} c INNER JOIN {join_table} j " \
+              " USING({id_name}) WHERE j.{parent_id_name} = %s ORDER BY insertion_order;"
 
         query = SQL(sql).format(
-            table=Identifier(self.join_table()),
-            pkey=Identifier(self.parent_key()))
+            child_table=Identifier(self.table),
+            join_table=Identifier(self.join_table()),
+            id_name=Identifier(self.id_name),
+            parent_id_name=Identifier(self.parent_key())
+        )
 
         conn = connect(**db_params)
 
@@ -486,23 +490,47 @@ class MathObject:
 
         return records
 
-    def id_for_records_not_in_parent(self, parent_id: Tuple[int, ...], verbose: bool = False):
-        """Returns dictionary with ids and indexes of items not in the parent group.
-        The indexes can be used with self.records"""
-        ids_for_all_records = self.records['id']
+    def records_not_in_parent(self, parent_id: Tuple[int, ...], as_columns: bool = True, verbose: bool = False):
+        """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
+        db_params = config()
+        sql = ''
 
-        records_in_parent_table = self.records_for_parent(parent_id=parent_id, verbose=verbose)
+        sql = "SELECT * FROM {child_table} WHERE {id_name} NOT IN" \
+              " (SELECT {id_name} FROM {join_table} WHERE {parent_id_name} = %s);"
 
-        record_ids_in_parent_table = records_in_parent_table[self.self_key()]
+        query = SQL(sql).format(
+            child_table=Identifier(self.table),
+            join_table=Identifier(self.join_table()),
+            id_name=Identifier(self.id_name),
+            parent_id_name=Identifier(self.parent_key())
+        )
 
-        record_ids_not_in_parent = list(set(ids_for_all_records) - set(record_ids_in_parent_table))
+        conn = connect(**db_params)
 
-        result = {
-            'ids': record_ids_not_in_parent,
-            'indexes': [ids_for_all_records.index(x) for x in record_ids_not_in_parent]
-        }
+        cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
-        return result
+        if verbose:
+            print(query.as_string(conn))
+            if isinstance(parent_id, int):
+                cur.mogrify(query, (parent_id, ))
+            elif isinstance(parent_id, tuple):
+                cur.mogrify(query, parent_id)
+
+        try:
+            cur.execute(query, (parent_id, ))
+        except TypeError:
+            cur.execute(query, parent_id)
+        except OperationalError as error:
+            print(error)
+
+        records = cur.fetchall()
+
+        if as_columns is True:
+            records = self.as_columns(records)
+
+        cur.close()
+        conn.close()
+        return records
 
     def parent_key(self):
         """Parent ID String to be used as a Key in the table"""
