@@ -123,6 +123,10 @@ class TypeTable:
         print("execute_values() done")
         cur.close()
 
+    def index(self, type_name: str) -> int:
+        """Convenience function to return the location of a type with the DataFrame"""
+        return self.types_df.index.get_loc(type_name)
+
     @staticmethod
     def if_not_none(key: str = None, value=None):
         """Add values to a dictionary if they are not None"""
