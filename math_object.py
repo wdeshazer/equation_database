@@ -42,6 +42,7 @@ class MathObject:
         self.records: dict = self.all_records()
         self.last_inserted = None
         self.id_name = self.table + "_id"
+        self.records_for_parent = None
 
     def all_records(self, as_columns: bool = True, verbose: bool = False):
         """Returns all records for math_object"""
@@ -447,8 +448,8 @@ class MathObject:
         cur.close()
         conn.close()
 
-    def records_for_parent(self, parent_id: Tuple[int, ...] = None, as_columns: bool = True,
-                           verbose: bool = False):
+    def get_records_for_parent(self, parent_id: Tuple[int, ...] = None, as_columns: bool = True,
+                               verbose: bool = False):
         """Get the {table} records for {parent}""".format(table=self.table, parent=self.parent_table)
         db_params = config()
 
@@ -497,6 +498,11 @@ class MathObject:
 
         sql = "SELECT * FROM {child_table} WHERE {id_name} NOT IN" \
               " (SELECT {id_name} FROM {join_table} WHERE {parent_id_name} = %s);"
+
+        # self_dict = dict(table='equation', join_table= lambda: 'equation_eqn_group',
+        #                  id_name='equation_id', parent_key = lambda : 'eqn_group_id')
+        # MyTuple = namedtuple('MyTuple', self_dict)
+        # self = MyTuple(**self_dict)
 
         query = SQL(sql).format(
             child_table=Identifier(self.table),
