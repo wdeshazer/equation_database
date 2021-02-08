@@ -74,6 +74,9 @@ class TypeTable:
         print("execute_values() done")
         cur.close()
 
+    def types(self):
+        return self.types_df.index.to_numpy()
+
     def record_count(self) -> int:
         """Method to get total number of eqn_groups"""
         return len(self.types_df)
