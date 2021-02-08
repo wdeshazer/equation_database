@@ -29,18 +29,23 @@ from PyQt5.QtWidgets import (
     QLabel, QLineEdit, QFrame, QComboBox,
     QSpacerItem, QSizePolicy, QPushButton, QGridLayout,
     QTextEdit, QGraphicsView, QTableWidget, QGraphicsDropShadowEffect,
-    QListWidget, QAction
+    QListWidget, QAction, QAbstractItemView  # , QMessageBox
 )
+
 from scipy.constants import golden_ratio
-from equation_group import EquationGroup
 from equation_group_dialog import Equation_Group_Dialog
+from psycopg2 import connect
 from config import config
-from psycopg2 import connect, OperationalError
+from equation_group import EquationGroup
+from equation import Equation
+from variable import Variable
+from unit import Unit
+from type_table import TypeTable
 
 # region Windows Task Bar Icon
 import ctypes
 
-window_left_start = 1000
+window_left_start = 300
 window_top_start = 300
 window_height = 1500
 
@@ -115,9 +120,6 @@ class Window(QMainWindow):
         self.app = QApplication(sys.argv)
         super(Window, self).__init__(*args, **kwargs)
 
-        db_params = config()
-        conn = connect(**db_params)
-
         self.styleSheet = """
             QWidget {
                 font-size: 14pt;
@@ -184,10 +186,6 @@ class Window(QMainWindow):
         self.height = window_height
         self.width = int(self.height * golden_ratio)
 
-        # region Data members
-        self.eqn_grp = EquationGroup()
-        # endregion
-
         # region ToolBar
         self.toolbar = self.addToolBar('Save')
         self.toolbar.setIconSize(QSize(128, 128))
@@ -237,7 +235,7 @@ class Window(QMainWindow):
         self.eq_group_vLayout.setSpacing(5)
 
         self.eq_group_cbox = QComboBox(self.eq_group_gbox)
-        self.refreshEqnGroupComboBox()
+        self.eq_group_cbox.activated.connect(self.populateEquationListBox)
 
         self.eq_group_vLayout.addWidget(self.eq_group_cbox)
 
@@ -259,8 +257,15 @@ class Window(QMainWindow):
         self.filter_hLayout.addWidget(self.filter_lEdit)
         self.eq_group_vLayout.addWidget(self.filter_frame)
 
-        self.eq_group_listbox = QListWidget(self.eq_group_gbox)
-        self.eq_group_vLayout.addWidget(self.eq_group_listbox)
+        self.equation_listbox = QListWidget(self.eq_group_gbox)
+        self.equation_listbox.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.equation_listbox.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.equation_listbox.itemClicked.connect(self.select_one_equation)
+        self.equation_listbox.itemSelectionChanged.connect(self.select_multiple_equations)
+
+        self.eq_group_vLayout.addWidget(self.equation_listbox)
+
+        # TODO add refresh to listbox here
 
         self.eq_add_btn = QPushButton("+")
         self.eq_add_btn.setObjectName("add_rm_btn")
@@ -438,13 +443,27 @@ class Window(QMainWindow):
         app_icon = QIcon("Icons/sigma_icon.png")
         self.setWindowIcon(app_icon)
         self.app.setStyle('Oxygen')
+        # endregion
 
-        self.show()
+        # region Data members
+        self.eqn_grp = EquationGroup()
+        self.eq = Equation()
+        self.var = Variable()
+        self.unit = Unit()
+        self.eq_type = TypeTable(name='equation_type')
+        self.var_type = TypeTable(name='variable_type')
+        self.unit_type = TypeTable(name='unit_type')
+
+        self.eq_grp_id: int = 1  # Can envision it pulling user specified state information someday
+        self.eqn_records_for_eqn_group = None  # Gets Populated when equations are present
+        self.eq_id: tuple = (1,)  # Same comment as eq_grp_id
+        self.var_records_for_eqns = None  # Gets populated when eqn_group_gets selected
+
+        self.refreshEqnGroupComboBox()
+        self.populateEquationListBox()
         self.app.setStyleSheet(self.styleSheet)
+        # TODO add callback for ComboxBox selection changed
 
-        conn.close()
-
-        sys.exit(self.app.exec_())
         # endregion
 
     def newEquationGroup(self):
@@ -460,12 +479,75 @@ class Window(QMainWindow):
     def getEquationGroup(self):
         return self.eqn_grp
 
-    def refreshEqnGroupComboBox(self, new_record=None, verbose=None):
+    def getEquations(self):
+        return self.eq
+
+    def populate_equation_type_cbox(self, selected: int = 1):
+        tcb = self.type_cbox
+
+        types = self.eq_type.types()
+
+        for tp in types:
+            tcb.addItem(tp)
+
+    def refreshEqnGroupComboBox(self, new_record=None, verbose: bool = False):
         self.eq_group_cbox.clear()
         records = self.getEquationGroup().records
 
-        for record in records:
-            self.eq_group_cbox.addItem(record.name)
+        record_names = records['name']
+        if verbose is True:
+            print(records)
+
+        for name in record_names:
+            self.eq_group_cbox.addItem(name)
+
+    # TODO populate listbox
+    def populateEquationListBox(self, verbose: bool = False):
+        eq_grp_cb = self.eq_group_cbox
+        eq_lb = self.equation_listbox
+
+        ind = eq_grp_cb.currentIndex()
+        eq_grp = self.getEquationGroup()
+        eq_grp_id = eq_grp.records[eq_grp.id_name][ind]
+        self.eq_grp_id = eq_grp_id
+
+        eqs = self.getEquations()
+
+        eq_lb.clear()
+        records_for_group = eqs.get_records_for_parent(parent_id=eq_grp_id)
+        self.eqn_records_for_eqn_group = records_for_group
+
+        names = records_for_group['name']
+        if verbose is True:
+            print(eq_grp_id, names)
+
+        for name in names:
+            eq_lb.addItem(name)
+
+    def select_one_equation(self, item, verbose: bool = False):
+        """This type of selection shows all equation details"""
+        eq_lb = self.equation_listbox
+        eq_grp_id = self.eq_grp_id
+
+        eq = self.eq
+        var = self.var
+
+        ind = eq_lb.selectedIndexes()
+
+        eqs = self.eqn_records_for_eqn_group
+
+        for i in ind:  # There is only one
+            ind = i.row()
+            self.name_lEdit.setText(item.text())
+            self.codefile_lEdit.setText(eqs['code_file_path'][ind])
+            self.populate_equation_type_cbox(selected=eqs['type'][ind])
+
+    def select_multiple_equations(self, verbose: bool = False):
+        """This type of selction only shows associated variables"""
+
+    def load_variables(self, parent_id: int = 1):
+        rcds = self.var.records_not_in_parent(parent_id=(parent_id, ))
+        print(rcds)
 
     def addEquation(self):
         dlg = Equation_Group_Dialog(self)
@@ -478,5 +560,15 @@ class Window(QMainWindow):
             print('Cancel!')
 
 
-if __name__ == '__main__':
+def main(*args, **kwargs):
+    db_params = config()
+    conn = connect(**db_params)
+
     ui = Window()
+    ui.show()
+    conn.close()
+    sys.exit(ui.app.exec_())
+
+
+if __name__ == '__main__':
+    main()
