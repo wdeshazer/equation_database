@@ -142,7 +142,7 @@ class MathObject:
     # Simple return statement. More sophisticated ones will have to be purpose built
     def values_for_fields(self, whereKey: str = 'id', whereValues: tuple = None,
                           name: bool = True, table: str = None, verbose: bool = False, **kwargs):
-        """whereKey could be 'id', 'name', etc.
+        """where_key could be 'id', 'name', etc.
             For any other field, you just set the fieldname to True"""
 
         if whereValues is None:
