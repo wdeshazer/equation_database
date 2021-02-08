@@ -6,35 +6,38 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-from math_object import MathObject
+from grouped_physics_object import GroupedPhysicsObject, add_field
 
 
-class Equation(MathObject):
+class Equation(GroupedPhysicsObject):
     """Equation class provides helper functions for inserting equations into the database"""
 
-    def __init__(self, table='equation', parent_table='eqn_group'):
+    def __init__(self, table_name='equation', parent_table_name='eqn_group'):
         """Constructor for Equation"""
-        super().__init__(table=table, parent_table=parent_table)
+        super().__init__(table_name=table_name, parent_table_name=parent_table_name)
 
     # pylint: disable=arguments-differ
-    def insert(self, *args, eq_type='Equality', **kwargs):
+    def new_record(self, *args, eq_type='Undesignated', **kwargs):
         """Insert new Equation"""
-        data = {'equation_type': eq_type}
-        super().insert(*args, data=data, **kwargs)
+        new_record = {'type': eq_type}
+        super().new_record(*args, new_record=new_record, **kwargs)
 
     def update(self, *args, eq_type: str = None, **kwargs):
         """Update Equation"""
         data = {}
-        data.update(super()._add_field('eq_type', eq_type))
+        data.update(add_field('eq_type', eq_type))
         super().update(*args, data=data, **kwargs)
 
     def associate_parent(self, parent_id: int = None, child_id: int = None,
                          insertion_order: int = None, inserted_by: str = None,
-                         code_file_path: str = None,  data: dict = None, verbose: bool = False):
+                         code_file_path: str = None,  new_record: dict = None, verbose: bool = False):
+
+        # noinspection PyTypeChecker
+        new_record: dict = None
 
         if code_file_path is not None:
-            data = dict(code_file_path=code_file_path)
+            new_record = dict(code_file_path=code_file_path)
 
         super().associate_parent(parent_id=parent_id, child_id=child_id,
                                  insertion_order=insertion_order, inserted_by=inserted_by,
-                                 data=data, verbose=verbose)
+                                 new_record=new_record, verbose=verbose)
