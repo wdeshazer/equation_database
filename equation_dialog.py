@@ -26,7 +26,7 @@ class Equation_Dialog(QDialog):
         # Info Widgets
         self.buttonbox: QDialogButtonBox = self.findChild(QDialogButtonBox, 'buttonbox')
         self.equation_listbox: QListWidget = self.findChild(QListWidget, 'equation_listbox')
-        self.eq_group_listbox: QListWidget = self.findChild(QListWidget, 'eq_group_listbox')
+        self.eq_group_listbox: QListWidget = self.findChild(QListWidget, 'equation_listbox')
         self.notes_textbox: QTextEdit = self.findChild(QTextEdit, 'notes_textbox')
         self.graphicsView: QGraphicsView = self.findChild(QGraphicsView, 'graphicsView')
 
