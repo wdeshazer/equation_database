@@ -2,7 +2,7 @@
 latex_template Provides helper functions for pulling the LaTeX template from the equations database
 
 Example:
-    python latex_template.py --verbose --keep --pattern '\si{\km}^3' --show
+    python latex_template.py --verbose --keep --pattern '\\si{\\km}^3' --show
     python latex_template.py --verbose --keep
 """
 
@@ -35,7 +35,7 @@ def template(version: int = None, verbose: bool = False) -> NamedTupleCursor:
             print('Extracting Latest Template from Database')
             t.start()
 
-        cur.execute('SELECT * FROM template ORDER BY create_date DESC LIMIT 1')
+        cur.execute('SELECT * FROM template ORDER BY created_at DESC LIMIT 1')
 
         if verbose:
             t.stop()
@@ -54,7 +54,7 @@ def template(version: int = None, verbose: bool = False) -> NamedTupleCursor:
         except Exception as error:
             print("Couldn't retrieve that template.", error)
             print("Returning latest template.")
-            cur.execute('SELECT * FROM template ORDER BY create_date DESC LIMIT 1')
+            cur.execute('SELECT * FROM template ORDER BY created_at DESC LIMIT 1')
 
     if verbose:
         print('Fetching data from Database')
