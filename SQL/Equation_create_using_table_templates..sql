@@ -22,7 +22,7 @@ CREATE SCHEMA public;
 CREATE TABLE template (
   id BIGSERIAL PRIMARY KEY,
   data text NOT NULL,
-  create_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   created_by text NOT NULL
 );
 
@@ -32,9 +32,11 @@ CREATE TABLE schema_templates.latex_object(
     notes text, -- For a more detailed description
     image BYTEA DEFAULT NULL,
     template_id INT,
-    create_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-    modified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    image_is_dirty BOOL DEFAULT FALSE, -- Image load inconsistent with last latex load
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by TEXT NOT NULL,
+    modified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    modified_by TEXT NOT NULL,
     compiled_at TIMESTAMPTZ DEFAULT NULL,
     CONSTRAINT math_object_ak_1 UNIQUE (name) NOT DEFERRABLE,
     CONSTRAINT fk_template
@@ -54,18 +56,13 @@ VALUES
 
 -- Table: Unit
 CREATE TABLE unit (
-    id BIGSERIAL PRIMARY KEY,
+    unit_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.latex_object INCLUDING ALL,
     type text NOT NULL DEFAULT 'SI',
     CONSTRAINT fk_template
         FOREIGN KEY (type)
             REFERENCES unit_type (type)
 );
-
-INSERT INTO unit (name, latex,created_by)
-VALUES
-    ('Unitless', '', 'razor'),
-    ('meter', 'm', 'razor');
 
 CREATE TABLE schema_templates.physics_object (
     LIKE schema_templates.latex_object INCLUDING ALL,
@@ -80,26 +77,62 @@ CREATE TABLE schema_templates.physics_object (
 -- Reference: Variable_Unit (table: Variable)
 ALTER TABLE schema_templates.physics_object ADD CONSTRAINT physics_object_unit
     FOREIGN KEY (unit_id)
-    REFERENCES unit (id)
+    REFERENCES unit (unit_id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
 
 -- Table: eqn_group
 CREATE TABLE eqn_group (
-    id BIGSERIAL PRIMARY KEY,
+    eqn_group_id BIGSERIAL PRIMARY KEY,
     name TEXT NOT NULL,
     notes TEXT, -- For a more detailed description
     created_by TEXT NOT NULL,
-    create_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+    modified_by TEXT NOT NULL,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    modified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     CONSTRAINT eq_group_name_ak_1 UNIQUE (name) NOT DEFERRABLE
 );
 
+CREATE OR REPLACE FUNCTION trigger_eqn_group_insert() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        new.modified_at = now();
+
+        if new.modified_by IS NULL THEN
+            new.modified_by = new.created_by;
+        END IF;
+
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER eqn_group_insert
+    BEFORE INSERT ON eqn_group
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_eqn_group_insert();
+
+CREATE OR REPLACE FUNCTION trigger_eqn_group_update() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        new.modified_at = now();
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER eqn_group_modified
+    BEFORE UPDATE ON eqn_group
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_eqn_group_update();
+
+
 -- Table: equation
 CREATE TABLE equation (
-    id BIGSERIAL PRIMARY KEY,
+    equation_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.physics_object INCLUDING ALL,
-    equation_type text  NOT NULL,
+    type text  NOT NULL,
     associated_code_file text
 );
 
@@ -107,6 +140,7 @@ CREATE TABLE equation (
 CREATE TABLE equation_eqn_group (
     equation_id INT  NOT NULL,
     eqn_group_id INT NOT NULL,
+    code_file_path TEXT, -- Each record can have its own code filepath
     insertion_order BIGINT,
     insertion_order_prev BIGINT,
     insertion_date TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -118,7 +152,7 @@ CREATE TABLE equation_eqn_group (
 -- Reference: Equation_Eqn_Group_Eqn_Group (table: Equation_Eqn_Group)
 ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_fk_eqn_group_id
     FOREIGN KEY (eqn_group_id)
-    REFERENCES eqn_group (id)
+    REFERENCES eqn_group (eqn_group_id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
@@ -126,7 +160,7 @@ ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_fk_eqn_group_id
 -- Reference: Equation_Eqn_Group_Equation (table: Equation_Eqn_Group)
 ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_fk_equation_id
     FOREIGN KEY (equation_id)
-    REFERENCES Equation (id)
+    REFERENCES Equation (equation_id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
@@ -147,7 +181,7 @@ VALUES
 
 -- Reference: Equation_Equation_Type (table: Equation)
 ALTER TABLE equation ADD CONSTRAINT equation_fk_equation_typ
-    FOREIGN KEY (equation_type)
+    FOREIGN KEY (type)
     REFERENCES equation_type (type)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
@@ -155,7 +189,7 @@ ALTER TABLE equation ADD CONSTRAINT equation_fk_equation_typ
 
 -- Table: Variable
 CREATE TABLE variable (
-    id BIGSERIAL PRIMARY KEY,
+    variable_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.physics_object INCLUDING ALL,
     variable_type text NOT NULL
 );
@@ -185,7 +219,7 @@ CREATE TABLE variable_equation (
 -- Reference: variable_equation_Equation (table: variable_equation)
 ALTER TABLE variable_equation ADD CONSTRAINT variable_equation_fk_equation_id
     FOREIGN KEY (equation_id)
-    REFERENCES equation (id)
+    REFERENCES equation (equation_id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
@@ -193,26 +227,12 @@ ALTER TABLE variable_equation ADD CONSTRAINT variable_equation_fk_equation_id
 -- Reference: variable_equation_Variable (table: variable_equation)
 ALTER TABLE variable_equation ADD CONSTRAINT variable_equation_fk_variable_id
     FOREIGN KEY (variable_id)
-    REFERENCES variable (id)
+    REFERENCES variable (variable_id)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
 
 -- Functions
-
-CREATE OR REPLACE FUNCTION trigger_set_timestamp() RETURNS TRIGGER
-    LANGUAGE plpgsql
-    AS $$
-    BEGIN
-        new.modified_at = now();
-        RETURN new;
-    END;
-    $$;
-
-CREATE TRIGGER latex_compiled
-    BEFORE UPDATE ON equation
-    for EACH ROW
-    EXECUTE PROCEDURE trigger_set_timestamp();
 
 do $$
     DECLARE
@@ -298,7 +318,7 @@ CREATE OR REPLACE FUNCTION template_default()
 RETURNS TRIGGER
 AS $$ BEGIN
     IF new.template_id IS NULL THEN
-        new.template_id = (SELECT id FROM template ORDER BY create_date DESC FETCH FIRST ROW ONLY);
+        new.template_id = (SELECT id FROM template ORDER BY created_at DESC FETCH FIRST ROW ONLY);
     END IF;
     RETURN new;
 END;
@@ -311,4 +331,76 @@ BEFORE INSERT ON
 FOR EACH ROW EXECUTE PROCEDURE
     template_default();
 
+CREATE OR REPLACE FUNCTION trigger_insert() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+
+        IF new.image IS NOT NULL THEN
+            new.compiled_at = now();
+        END IF;
+
+        IF new.modified_by IS NULL THEN
+            new.modified_by = new.created_by;
+        END IF;
+
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER latex_compiled
+    BEFORE INSERT ON equation
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_insert();
+
+CREATE TRIGGER latex_compiled
+    BEFORE INSERT ON variable
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_insert();
+
+CREATE TRIGGER latex_compiled
+    BEFORE INSERT ON unit
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_insert();
+
+
+CREATE OR REPLACE FUNCTION trigger_set_update() RETURNS TRIGGER
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+        new.modified_at = now();
+
+        IF new.image IS NOT NULL THEN
+            new.compiled_at = now();
+        END IF;
+
+        IF new.latex IS NOT NULL and new.image IS NULL THEN
+            new.image_is_dirty = TRUE;
+        END IF;
+
+        RETURN new;
+    END;
+    $$;
+
+CREATE TRIGGER modified_by_on_insert
+    BEFORE UPDATE ON equation
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_set_update();
+
+CREATE TRIGGER modified_by_on_insert
+    BEFORE UPDATE ON variable
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_set_update();
+
+CREATE TRIGGER modified_by_on_insert
+    BEFORE UPDATE ON unit
+    for EACH ROW
+    EXECUTE PROCEDURE trigger_set_update();
+
+-- noinspection SqlInsertValues
+
+INSERT INTO unit (name, latex, created_by)
+VALUES
+    ('Unitless', '', 'razor'),
+    ('meter', 'm', 'razor');
 
