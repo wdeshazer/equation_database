@@ -18,44 +18,49 @@ from PyQt5.QtWidgets import (
 from equation_group import EquationGroup
 
 
-class Equation_Group_Dialog(QDialog):
-
+class EquationGroupDialog(QDialog):
+    """Equation Group Dialog"""
     def __init__(self, *args, **kwargs):
-        super(Equation_Group_Dialog, self).__init__(*args, **kwargs)
+        super().__init__(*args, **kwargs)
         loadUi('eq_group_dialog.ui', self)
         # Info Widgets
         self.buttonbox: QDialogButtonBox = self.findChild(QDialogButtonBox, 'buttonbox')
         self.existing_eq_group_list: QListWidget = self.findChild(QListWidget, 'existing_eq_group_list')
-        self.existing_eq_group_list.itemSelectionChanged.connect(self.equatGroupSelected)
+        self.existing_eq_group_list.itemSelectionChanged.connect(self.equation_group_selected)
 
         self.eq_list: QListWidget = self.findChild(QListWidget, 'eq_list')
-        self.existing_notes_textbox: QTextEdit = self.findChild(QTextEdit, 'existing_notes_textEdit')
-        self.new_eq_group_lEdit: QLineEdit = self.findChild(QLineEdit, 'new_eq_group_lEdit')
-        self.notes_textbox: QTextEdit = self.findChild(QTextEdit, 'notes_textEdit')
+        self.existing_notes_textbox: QTextEdit = self.findChild(QTextEdit, 'existing_notes_text_edit')
+        self.new_eq_group_l_edit: QLineEdit = self.findChild(QLineEdit, 'new_eq_group_l_edit')
+        self.notes_textbox: QTextEdit = self.findChild(QTextEdit, 'notes_text_edit')
 
         self.eqn_group = EquationGroup()
-        self.populateEquationList()
+        self.populate_equation_list()
 
     def accept(self, verbose=False) -> None:
-        self.eqn_group.insert(name=self.new_eq_group_lEdit.text(),
+        """Accept additions to Equation Group"""
+        self.eqn_group.insert(name=self.new_eq_group_l_edit.text(),
                               notes=self.notes_textbox.toPlainText(),
                               verbose=verbose)
         super().accept()
 
     def reject(self) -> None:
+        """Reject additions to Equation Group"""
         print('rejected')
         super().reject()
 
-    def populateEquationList(self):
-        records = self.getEquationGroup().records
+    def populate_equation_list(self):
+        """Populates the equation list box"""
+        records = self.get_equation_group().records
         if records:
             for record in records:
                 self.existing_eq_group_list.addItem(record.name)
 
-    def getEquationGroup(self):
+    def get_equation_group(self):
+        """Returns a reference to the equation group object"""
         return self.eqn_group
 
-    def equatGroupSelected(self):
+    def equation_group_selected(self):
+        """Updates equation group selected"""
         ind = self.existing_eq_group_list.currentIndex().row()
 
         associated_note = self.eqn_group.records[ind].notes
