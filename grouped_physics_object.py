@@ -123,7 +123,7 @@ def generic_associate_parent(parent_id: int = None, child_id: int = None,
     return data_df
 
 
-def generic_last_equation_number(table_data: DataFrame) -> int:
+def generic_last_equation_number(table_data: Optional[DataFrame] = None) -> int:
     """Record Count using dataframe"""
     numbers: Series = table_data.loc[slice(None), 'name'].str.extract(r'^[a-zA-Z]+\s([0-9]+)$')
     rcount: Series = numbers.astype(int).max()
@@ -135,7 +135,7 @@ def generic_last_equation_number(table_data: DataFrame) -> int:
 
 
 def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_table_name: str = None,
-                          data_df: DataFrame = DataFrame(None), name: str = None, new_record=None,
+                          data_df: Optional[DataFrame] = None, name: str = None, new_record=None,
                           latex: LatexData = None, notes: str = None,
                           dimensions: int = 1, insertion_order: int = None, created_by: str = None,
                           unit_id: int = 1, verbose: bool = None) -> DataFrame:
@@ -184,7 +184,7 @@ def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_
     new_records = cur.fetchall()
     conn.commit()
     cur.close()
-    updated_df: DataFrame = DataFrame(None)
+    updated_df: Optional[DataFrame] = None
 
     if parent_id is not None:
         for record in new_records:
