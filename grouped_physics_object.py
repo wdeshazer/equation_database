@@ -9,6 +9,7 @@ __license__ = "MIT"
 
 from math import isnan
 from warnings import warn
+from typing import NewType, List, NamedTuple, Optional
 from pandas import DataFrame, Series, read_sql
 from psycopg2.sql import SQL, Identifier, Placeholder, Composed
 from psycopg2 import connect, OperationalError
@@ -27,6 +28,10 @@ class ImageWithoutTemplateIDError(UserWarning):
 
 class NoRecordIDError(UserWarning):
     """UserWarning for EquationGroup"""
+
+
+Record = NewType("Record", NamedTuple)
+Records = NewType("Records", List[Record])
 
 
 def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = None) -> DataFrame:
@@ -152,7 +157,7 @@ def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_
     if latex is None:
         latex = LatexData()
 
-    new_record.update(name=name, notes=notes, dimensions=dimensions, unit_id=unit_id,  type='Conservation',
+    new_record.update(name=name, notes=notes, dimensions=dimensions, unit_id=unit_id,  type_name='Unassigned',
                       latex=latex.latex, image=latex.image, compiled_at=latex.compiled_at,
                       template_id=latex.template_id, created_by=created_by)
 
@@ -208,15 +213,26 @@ class GroupedPhysicsObject:
         """Constructor for MathObject"""
         self.table_name = table_name
         self.parent_table_name = parent_table_name  # For equations it is eqn_group. For variables it is equations
-        self.id_name = self.table_name + '_id'
-        self.parent_table_id_name = self.parent_table_name + '_id'
-        self.grouped_data: DataFrame = DataFrame(None)
+        self.grouped_data: Optional[DataFrame] = None
+        self.all_records: Optional[Records] = None
+        self.selected_parent_id: Optional[int] = None
+        self.selected_data_records: Optional[Records] = None
+        self.records_not_selected_unique: Optional[Records] = None
         self.pull_grouped_data()
+
+    def id_name(self):
+        """Convenience method to return id_name"""
+        return self.table_name + '_id'
+
+    def parent_table_id_name(self):
+        """Convenenience method to return parent_table_id_name"""
+        return self.parent_table_name + '_id'
 
     def pull_grouped_data(self):
         """Extract grouped data from database"""
         self.grouped_data = \
             generic_pull_grouped_data(table_name=self.table_name, parent_table_name=self.parent_table_name)
+        self._set_all_records()
 
     def associate_parent(self, parent_id: int = None, child_id: int = None, new_record: dict = None,
                          insertion_order: int = None, inserted_by: str = None, verbose: bool = False):
@@ -229,6 +245,9 @@ class GroupedPhysicsObject:
                                      table_name=table_name, parent_table_name=parent_table_name,
                                      insertion_order=insertion_order, inserted_by=inserted_by,
                                      verbose=verbose)
+
+        if self.selected_parent_id is not None:
+            self.set_records_for_parent(parent_id=self.selected_parent_id)
 
     def new_record(self, parent_id: int = None, name: str = None, latex: LatexData = None,
                    new_record: dict = None, notes: str = None, dimensions: int = 1,
@@ -244,6 +263,9 @@ class GroupedPhysicsObject:
                 data_df=self.grouped_data, dimensions=dimensions, unit_id=unit_id,
                 insertion_order=insertion_order, created_by=created_by,  verbose=verbose
             )
+
+    def _set_all_records(self):
+        self.all_records = self.grouped_data.drop_duplicates('name').droplevel(self.parent_table_id_name()).sort_index()
 
     def update(self, an_id: id = None, where_key: str = None, name: str = None,
                data=None, latex: LatexData = None, notes: str = None, unit_id: int = None,
@@ -316,3 +338,34 @@ class GroupedPhysicsObject:
                 cur.close()
 
                 self.pull_grouped_data()
+
+    def selected_data_df(self, parent_id: int = None):
+        """Retern selected data in DataFrame form"""
+        return self.grouped_data.loc[parent_id, :]
+
+    def set_records_for_parent(self, parent_id: int = None):
+        """Sets records for parents after an update"""
+        selected_data_df = self.selected_data_df(parent_id)
+        self.selected_data_records = Records(list(selected_data_df.itertuples()))
+        self._set_records_not_in_parent()
+
+    def data_not_selected_full_df(self):
+        """Method to return data not in selected set as DataFrame"""
+        rcd_nums_in = self.selected_data_df().index
+        rcds_not_in = self.grouped_data.query(self.id_name() + '!=' + str(tuple(rcd_nums_in)))
+        return rcds_not_in
+
+    def data_not_selected_unique_df(self):
+        """Method to return unique data not in selected set as DataFrame"""
+        rcds_not_in = self.data_not_selected_full_df()
+        uniq = rcds_not_in.drop_duplicates('name').droplevel(self.parent_table_id_name()).sort_index()
+        return uniq
+
+    def data_not_selected_unique_rcds(self):
+        """Method to return unique data not in selected set as Records"""
+        uniq = self.data_not_selected_unique_df()
+        return Records(list(uniq.itertuples()))
+
+    def _set_records_not_in_parent(self):
+        """Store Unique Records to file"""
+        self.records_not_selected_unique = self.data_not_selected_unique_rcds()
