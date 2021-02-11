@@ -12,8 +12,8 @@ v = Variable()
 
 
 grp_count = eq_grp.record_count_total()
-eq_count = eq.record_count_total()
-var_count = v.record_count_total()
+eq_count = len(eq.grouped_data)
+var_count = len(v.grouped_data)
 
 n = 6 - grp_count
 for cnt in range(n):
@@ -25,13 +25,12 @@ grp_records = eq_grp.records
 # Add upto 15 records and create associations for the newly generated equations
 n = 16 - eq_count
 for i in range(n):
-    eq.insert()
-    # new_record_id = eq.last_inserted['id'][0]
-    #
-    # for j in range(2):
-    #     grp_rand = randint(1, 6)
-    #     eq_grp_id = grp_records['id'][grp_rand]
-    #     eq.associate_parent(parent_id=eq_grp_id, child_id=new_record_id)
+    eq.new_record()
+
+# Add upto 15 records and create associations for the newly generated equations
+n = 25 - var_count
+for i in range(n):
+    v.new_record()
 
 # Ensure that each group has at least 3 equation records
 
@@ -39,13 +38,15 @@ a_path = os.getcwd() + os.pathsep + 'my_py.py'
 
 for i in range(grp_count):
     grp_id = grp_records[eq_grp.id_name][i]
-    eq_count_in_group = eq.record_count_for_parent(parent_id=(grp_id,))
+    eq.set_records_for_parent(parent_id=grp_id)
+    used = eq.selected_data_records
+    unused = eq.records_not_selected_unique
+    eq_count_in_group = len(used)
 
     # Minimum number of equations in group is 3. The following doesn't loop if eq_count_in_group > 3)
     MAX_EQ_PER_GROUP = 3
 
-    unused = eq.records_not_in_parent(parent_id=grp_id)
-    n_unused = len(unused[eq.id_name])
+    n_unused = len(unused)
 
     n_more_in_group = MAX_EQ_PER_GROUP - eq_count_in_group
     if n_more_in_group > 0:
@@ -53,31 +54,29 @@ for i in range(grp_count):
         print(eqns_to_insert)
 
         for ind in eqns_to_insert:
-            child_id = unused[eq.id_name][ind]
+            child_id = unused[ind].Index
             eq.associate_parent(parent_id=grp_id, child_id=child_id, code_file_path=a_path)
 
-eq_records = eq.records
+eq_records = eq.all_records
 eq_count = len(eq_records)
-
-n = 26 - var_count
-for i in range(n):
-    v.insert()
-    new_record_id = v.last_inserted[v.id_name][0]
 
 for i in range(eq_count):
     eq_id = eq_records[eq.id_name][i]
-    v_count_in_group = v.record_count_for_parent(parent_id=(eq_id,))
+    v.set_records_for_parent(parent_id=eq_id)
+    used = v.selected_data_records
+    unused = v.records_not_selected_unique
+    var_count_in_group = len(used)
 
     # Minimum number of equations in group is 3. The following doesn't loop if eq_count_in_group > 3)
     MAX_VAR_PER_GROUP = 5
-    unused = v.records_not_in_parent(parent_id=eq_id)
-    n_unused = len(unused[v.id_name])
 
-    n_more_in_group = MAX_VAR_PER_GROUP - v_count_in_group
+    n_unused = len(unused)
+
+    n_more_in_group = MAX_VAR_PER_GROUP - var_count_in_group
     if n_more_in_group > 0:
-        var_to_insert = sample(range(1, n_unused), n_more_in_group)
-        print(var_to_insert)
+        eqns_to_insert = sample(range(1, n_unused), n_more_in_group)
+        print(eqns_to_insert)
 
-        for ind in var_to_insert:
-            child_id = unused[v.id_name][ind]
+        for ind in eqns_to_insert:
+            child_id = unused[ind].Index
             v.associate_parent(parent_id=eq_id, child_id=child_id)
