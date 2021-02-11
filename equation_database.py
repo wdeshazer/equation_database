@@ -39,7 +39,7 @@ from scipy.constants import golden_ratio
 from psycopg2 import connect
 from config import config
 from equation_group import EquationGroup
-from equationgroupdialog import EquationGroupDialog
+from equation_group_dialog import EquationGroupDialog
 from equation import Equation
 from variable import Variable
 from unit import Unit
