@@ -40,7 +40,7 @@ class TypeTable:
         db_params = config()
         conn = connect(**db_params)
 
-        out_data = read_sql(query, con=conn, index_col='type')
+        out_data = read_sql(query, con=conn, index_col='type_name')
 
         if verbose:
             print('Extracting records from Table: ' + table)
@@ -55,7 +55,7 @@ class TypeTable:
 
         self.types_df = self.types_df.append(new_data)
 
-        sql = 'INSERT INTO {table} (type) VALUES %s;'
+        sql = 'INSERT INTO {table} (type_name) VALUES %s;'
         query = SQL(sql).format(table=Identifier(self.name))
 
         tuples = [tuple([x]) for x in new_data.index]
@@ -75,6 +75,7 @@ class TypeTable:
         cur.close()
 
     def types(self):
+        """Returns Types as Numpy"""
         return self.types_df.index.to_numpy()
 
     def record_count(self) -> int:
@@ -105,7 +106,7 @@ class TypeTable:
             print('you are here')
             types = tuple([types])
 
-        sql: str = 'DELETE FROM {table} WHERE type IN ({values});'
+        sql: str = 'DELETE FROM {table} WHERE type_name IN ({values});'
         query = SQL(sql).format(values=SQL(', ').join(map(Literal, types)),
                                 table=Identifier(self.name)
                                 )
