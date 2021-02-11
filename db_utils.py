@@ -11,7 +11,7 @@ __license__ = "MIT"
 
 from collections import defaultdict, namedtuple
 from warnings import warn
-from typing import NamedTuple, Union
+from typing import NamedTuple, Union, Optional
 from pandas import DataFrame, read_sql
 from psycopg2.sql import SQL, Identifier, Placeholder, Composed
 from psycopg2 import connect, OperationalError, Binary
@@ -149,7 +149,7 @@ def self_named_tuple_example(table_name: str = None, parent_table_name: str = No
 
     self_dict = dict(table_name=table_name, join_table=join_table,
                      table_id=table_id, parent_id=parent_id)
-    MyTuple = namedtuple('MyTuple', self_dict)
+    MyTuple = namedtuple('MyTuple', self_dict)  # pylint: disable=invalid-name
     # noinspection PyArgumentList
     self = MyTuple(**self_dict)
 
@@ -289,7 +289,7 @@ def save_db(table_name: str = None, parent_table_name: str = None):
 
 
 def new_record_db(parent_id: int = None, table_name: str = None, parent_table_name: str = None,
-                  data_df: DataFrame = None,
+                  data_df: Optional[DataFrame] = None,
                   name: str = None, new_record=None, latex: str = None, notes: str = None,
                   image: bytes = None, template_id: int = None, dimensions: int = 1,
                   insertion_order: int = None, created_by: str = None, unit_id: int = 1,
@@ -360,7 +360,8 @@ def new_record_db(parent_id: int = None, table_name: str = None, parent_table_na
     return updated_df
 
 
-def record_count_total_db(table_data: DataFrame, table_id: str = None) -> int:
+def record_count_total_db(table_data: Optional[DataFrame] = None, table_id: str = None) -> int:
+    """Return total record count in the database for a given table"""
     return table_data.index.get_level_values(table_id).max()
 
 
@@ -459,6 +460,5 @@ def associate_parent(parent_id: int = None, child_id: int = None,
     conn.commit()
 
     cur.close()
-
 
 # endregion
