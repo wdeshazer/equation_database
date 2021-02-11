@@ -17,15 +17,15 @@ class Equation(GroupedPhysicsObject):
         super().__init__(table_name=table_name, parent_table_name=parent_table_name)
 
     # pylint: disable=arguments-differ
-    def new_record(self, *args, eq_type='Undesignated', **kwargs):
+    def new_record(self, *args, type_name='Undesignated', **kwargs):
         """Insert new Equation"""
-        new_record = {'type': eq_type}
+        new_record = {'type_name': type_name}
         super().new_record(*args, new_record=new_record, **kwargs)
 
-    def update(self, *args, eq_type: str = None, **kwargs):
+    def update(self, *args, type_name: str = None, **kwargs):
         """Update Equation"""
         data = {}
-        data.update(add_field('eq_type', eq_type))
+        data.update(add_field('type_name', type_name))
         super().update(*args, data=data, **kwargs)
 
     def associate_parent(self, parent_id: int = None, child_id: int = None,
