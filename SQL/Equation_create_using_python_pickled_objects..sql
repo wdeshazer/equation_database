@@ -28,27 +28,21 @@ CREATE TABLE template (
 
 CREATE TABLE schema_templates.latex_object(
     name TEXT NOT NULL,
-    latex TEXT NOT NULL,
+    latex BYTEA DEFAULT NULL,   --Pickled Python LatexData object, include latex,
+                                -- template_ids, template_id, image and compiled at
     notes text, -- For a more detailed description
-    image BYTEA DEFAULT NULL,
-    template_id INT,
-    image_is_dirty BOOL DEFAULT FALSE, -- Image load inconsistent with last latex load
     created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     created_by TEXT NOT NULL,
     modified_at TIMESTAMPTZ NOT NULL DEFAULT now(),
     modified_by TEXT NOT NULL,
-    compiled_at TIMESTAMPTZ DEFAULT NULL,
-    CONSTRAINT math_object_ak_1 UNIQUE (name) NOT DEFERRABLE,
-    CONSTRAINT fk_template
-        FOREIGN KEY(template_id)
-            REFERENCES template(id)
+    CONSTRAINT math_object_ak_1 UNIQUE (name) NOT DEFERRABLE
 );
 
 CREATE TABLE unit_type (
-    type_name text PRIMARY KEY
+    type text PRIMARY KEY
 );
 
-INSERT INTO unit_type (type_name)
+INSERT INTO unit_type (type)
 VALUES
     ('SI'),
     ('CGS'),
@@ -58,10 +52,10 @@ VALUES
 CREATE TABLE unit (
     unit_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.latex_object INCLUDING ALL,
-    type_name text NOT NULL DEFAULT 'SI',
+    type text NOT NULL DEFAULT 'SI',
     CONSTRAINT fk_template
-        FOREIGN KEY (type_name)
-            REFERENCES unit_type (type_name)
+        FOREIGN KEY (type)
+            REFERENCES unit_type (type)
 );
 
 CREATE TABLE schema_templates.physics_object (
@@ -132,7 +126,7 @@ CREATE TRIGGER eqn_group_modified
 CREATE TABLE equation (
     equation_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.physics_object INCLUDING ALL,
-    type_name text  NOT NULL,
+    type text  NOT NULL,
     associated_code_file text
 );
 
@@ -167,12 +161,12 @@ ALTER TABLE equation_eqn_group ADD CONSTRAINT equation_eqn_group_fk_equation_id
 
 -- Table: Equation_Type
 CREATE TABLE equation_type (
-    type_name text  PRIMARY KEY
+    type text  PRIMARY KEY
 );
 
-INSERT INTO equation_type (type_name)
+INSERT INTO equation_type (type)
 VALUES
-    ('Unassigned'),
+    ('Undesignated'),
     ('Conservation'),
     ('Constitutive'),
     ('Definition'),
@@ -182,8 +176,8 @@ VALUES
 
 -- Reference: Equation_Equation_Type (table: Equation)
 ALTER TABLE equation ADD CONSTRAINT equation_fk_equation_typ
-    FOREIGN KEY (type_name)
-    REFERENCES equation_type (type_name)
+    FOREIGN KEY (type)
+    REFERENCES equation_type (type)
     NOT DEFERRABLE
     INITIALLY IMMEDIATE
 ;
@@ -192,17 +186,16 @@ ALTER TABLE equation ADD CONSTRAINT equation_fk_equation_typ
 CREATE TABLE variable (
     variable_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.physics_object INCLUDING ALL,
-    type_name text NOT NULL
+    variable_type text NOT NULL
 );
 
 -- Table: Equation_Type
 CREATE TABLE variable_type (
-    type_name text  PRIMARY KEY
+    type text  PRIMARY KEY
 );
 
-INSERT INTO variable_type (type_name)
+INSERT INTO variable_type (type)
 VALUES
-    ('Unassigned'),
     ('Constant'),
     ('Coordinate'),
     ('Field');
@@ -316,31 +309,31 @@ CREATE TRIGGER insert_var_order
 --     END;
 --     $$;
 
-CREATE OR REPLACE FUNCTION template_default()
-RETURNS TRIGGER
-AS $$ BEGIN
-    IF new.template_id IS NULL THEN
-        new.template_id = (SELECT id FROM template ORDER BY created_at DESC FETCH FIRST ROW ONLY);
-    END IF;
-    RETURN new;
-END;
-$$ LANGUAGE plpgsql;
-
-CREATE TRIGGER
-    template_default
-BEFORE INSERT ON
-    equation
-FOR EACH ROW EXECUTE PROCEDURE
-    template_default();
+-- CREATE OR REPLACE FUNCTION template_default()
+-- RETURNS TRIGGER
+-- AS $$ BEGIN
+--     IF new.template_id IS NULL THEN
+--         new.template_id = (SELECT id FROM template ORDER BY created_at DESC FETCH FIRST ROW ONLY);
+--     END IF;
+--     RETURN new;
+-- END;
+-- $$ LANGUAGE plpgsql;
+--
+-- CREATE TRIGGER
+--     template_default
+-- BEFORE INSERT ON
+--     equation
+-- FOR EACH ROW EXECUTE PROCEDURE
+--     template_default();
 
 CREATE OR REPLACE FUNCTION trigger_insert() RETURNS TRIGGER
     LANGUAGE plpgsql
     AS $$
     BEGIN
 
-        IF new.image IS NOT NULL THEN
-            new.compiled_at = now();
-        END IF;
+--         IF new.image IS NOT NULL THEN
+--             new.compiled_at = now();
+--         END IF;
 
         IF new.modified_by IS NULL THEN
             new.modified_by = new.created_by;
@@ -372,13 +365,9 @@ CREATE OR REPLACE FUNCTION trigger_set_update() RETURNS TRIGGER
     BEGIN
         new.modified_at = now();
 
-        IF new.image IS NOT NULL THEN
-            new.compiled_at = now();
-        END IF;
-
-        IF new.latex IS NOT NULL and new.image IS NULL THEN
-            new.image_is_dirty = TRUE;
-        END IF;
+--         IF new.image IS NOT NULL THEN
+--             new.compiled_at = now();
+--         END IF;
 
         RETURN new;
     END;
@@ -401,9 +390,8 @@ CREATE TRIGGER modified_by_on_insert
 
 -- noinspection SqlInsertValues
 
-INSERT INTO unit (name, latex, created_by)
+INSERT INTO unit (name, created_by)
 VALUES
-    ('Unassigned', '', 'razor'),
-    ('Unitless', '', 'razor'),
-    ('meter', 'm', 'razor');
+    ('Unitless', 'razor'),
+    ('meter', 'razor');
 
