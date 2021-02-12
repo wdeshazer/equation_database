@@ -218,7 +218,7 @@ class GroupedPhysicsObject:
         self.table_name = table_name
         self.parent_table_name = parent_table_name  # For equations it is eqn_group. For variables it is equations
         self.grouped_data: Optional[DataFrame] = None
-        self.all_records: Optional[Records] = None
+        self.all_records: Optional[DataFrame] = None
         self.selected_parent_id: Optional[int] = None
         self.selected_data_records: Optional[Records] = None
         self.records_not_selected_unique: Optional[Records] = None
@@ -278,7 +278,7 @@ class GroupedPhysicsObject:
         """Insert New Record Into grouped_physics_object"""
 
         if where_key is None:
-            where_key = self.id_name
+            where_key = self.id_name()
 
         if an_id is None:
             warn("No Record ID Specified", NoRecordIDError)
@@ -360,28 +360,28 @@ class GroupedPhysicsObject:
             self.selected_data_records = None
         else:
             self.selected_data_records = Records(list(selected_data_df.itertuples()))
-        self._set_records_not_in_parent()
+        self._set_records_not_in_parent(parent_id=parent_id)
 
-    def data_not_selected_full_df(self):
+    def data_not_selected_full_df(self, parent_id: int = None):
         """Method to return data not in selected set as DataFrame"""
         if self.selected_data_records is None:
             rcd_nums_in = []
         else:
-            rcd_nums_in = self.selected_data_df().index
+            rcd_nums_in = self.selected_data_df(parent_id=parent_id).index
         rcds_not_in = self.grouped_data.query(self.id_name() + '!=' + str(tuple(rcd_nums_in)))
         return rcds_not_in
 
-    def data_not_selected_unique_df(self):
+    def data_not_selected_unique_df(self, parent_id: int = None):
         """Method to return unique data not in selected set as DataFrame"""
-        rcds_not_in = self.data_not_selected_full_df()
+        rcds_not_in = self.data_not_selected_full_df(parent_id=parent_id)
         uniq = rcds_not_in.drop_duplicates('name').droplevel(self.parent_table_id_name()).sort_index()
         return uniq
 
-    def data_not_selected_unique_rcds(self):
+    def data_not_selected_unique_rcds(self, parent_id: int = None):
         """Method to return unique data not in selected set as Records"""
-        uniq = self.data_not_selected_unique_df()
+        uniq = self.data_not_selected_unique_df(parent_id=parent_id)
         return Records(list(uniq.itertuples()))
 
-    def _set_records_not_in_parent(self):
+    def _set_records_not_in_parent(self, parent_id: int = None):
         """Store Unique Records to file"""
-        self.records_not_selected_unique = self.data_not_selected_unique_rcds()
+        self.records_not_selected_unique = self.data_not_selected_unique_rcds(parent_id=parent_id)
