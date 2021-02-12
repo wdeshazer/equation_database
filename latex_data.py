@@ -18,7 +18,7 @@ import argparse
 import pprint
 from io import BytesIO
 from datetime import datetime
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import NewType, List
 from pickle import dumps
 from psycopg2 import connect, DatabaseError
@@ -190,7 +190,6 @@ def main(pattern: str = 'm^3', keep: bool = False, temp_fname: str = "eq_db", ve
 class LatexData:
     """Class for managing LaTeX data, including image"""
     latex: str = "a^2 + b^2 = c^2"
-    template_ids: TemplateIDs = field(default_factory=available_templates)
     template_id: TemplateID = None
     image: bytes = None
     compiled_at: datetime = None
@@ -201,7 +200,8 @@ class LatexData:
             recompile if either there is no image or the image is inconsistent with the LaTeX.
              An inconsistency can only happen when the LaTeX field is update manually with an SQL query"""
         if self.template_id is None or self.template_id == 'latest':
-            self.template_id = self.template_ids[-1]
+            template_ids: TemplateIDs = available_templates()
+            self.template_id = template_ids[-1]  # pylint: disable=unsubscriptable-object
         self.update(image=self.image, image_is_dirty=self.image_is_dirty)
 
     def update(self, latex: str = None, template_id: TemplateID = None, image: bytes = None,
