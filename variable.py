@@ -12,9 +12,9 @@ from grouped_physics_object import GroupedPhysicsObject, add_field
 class Variable(GroupedPhysicsObject):
     """Class for Managing Variable Table in Postgres database"""
 
-    def __init__(self, table_name='variable', parent_table_name='equation'):
+    def __init__(self, table_name='variable', parent_table_name='equation', verbose: bool = False):
         """Constructor for Equation"""
-        super().__init__(table_name=table_name, parent_table_name=parent_table_name)
+        super().__init__(table_name=table_name, parent_table_name=parent_table_name, verbose=verbose)
 
     # pylint: disable=arguments-differ
     def new_record(self, *args, unit_id: int = 1, type_name: str = 'Constant', dimensions: int = 1, **kwargs):

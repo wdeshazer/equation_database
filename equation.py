@@ -12,9 +12,9 @@ from grouped_physics_object import GroupedPhysicsObject, add_field
 class Equation(GroupedPhysicsObject):
     """Equation class provides helper functions for inserting equations into the database"""
 
-    def __init__(self, table_name='equation', parent_table_name='eqn_group'):
+    def __init__(self, table_name='equation', parent_table_name='eqn_group', verbose: bool = False):
         """Constructor for Equation"""
-        super().__init__(table_name=table_name, parent_table_name=parent_table_name)
+        super().__init__(table_name=table_name, parent_table_name=parent_table_name, verbose=verbose)
 
     # pylint: disable=arguments-differ
     def new_record(self, *args, type_name='Undesignated', **kwargs):

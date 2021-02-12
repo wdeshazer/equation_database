@@ -35,11 +35,11 @@ class NoRecordIDError(UserWarning):
 
 class MathObject:
     """Base class for Equations, Variables, and Units"""
-    def __init__(self, table: str, parent_table: str):
+    def __init__(self, table: str, parent_table: str, verbose: bool = True):
         """Constructor for MathObject"""
         self.table = table
         self.parent_table = parent_table  # For equations it is eqn_group. For variables it is equations
-        self.records: dict = self.all_records()
+        self.records: dict = self.all_records(verbose=verbose)
         self.last_inserted = None
         self.id_name = self.table + "_id"
         self.records_for_parent = None
