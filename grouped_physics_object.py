@@ -10,6 +10,7 @@ __license__ = "MIT"
 from math import isnan
 from warnings import warn
 from typing import NewType, List, NamedTuple, Optional
+from time import time
 from pandas import DataFrame, Series, read_sql
 from psycopg2.sql import SQL, Identifier, Placeholder, Composed
 from psycopg2 import connect, OperationalError
@@ -38,7 +39,8 @@ Record = NewType("Record", NamedTuple)
 Records = NewType("Records", List[Record])
 
 
-def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = None) -> DataFrame:
+def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = None,
+                              verbose: bool = False) -> DataFrame:
     """Multi-index Extract DataFrame DB"""
     table_id_name: str = table_name + '_id'
     parent_id_name: str = parent_table_name + '_id'
@@ -55,11 +57,24 @@ def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = N
     db_params = config()
     conn = connect(**db_params)
 
+    t: Optional[float] = None
+
+    if verbose is True:
+        t = time()
+        print("Entering database query at time: ", t)
+
     data_df = read_sql(query, con=conn, index_col=[parent_id_name, table_id_name])
     # This was a good example of loading objects to file
     # data_df['latex'] = data_df['latex'].apply(loads)
 
+    if verbose is True:
+        print("Exiting duration: ", time() - t)
+
     data_df['latex_obj'] = None
+
+    if verbose is True:
+        t = time()
+        print("Compiling Latex at time:", t)
 
     for row in data_df.itertuples():
         data_df.loc[row.Index, 'latex_obj'] = \
@@ -67,6 +82,9 @@ def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = N
                       image=row.image, compiled_at=row.compiled_at)
 
     data_df.sort_values([parent_id_name, 'insertion_order'], inplace=True)
+
+    if verbose is True:
+        print("Complete duration:", time() - t)
 
     return data_df
 
@@ -198,7 +216,7 @@ def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_
             )
     else:
         updated_df = \
-            generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name)
+            generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name, verbose=verbose)
 
     return updated_df
 
@@ -213,7 +231,7 @@ def add_field(key: str = None, value=None):
 
 class GroupedPhysicsObject:
     """Base class for Equations, Variables, and Units"""
-    def __init__(self, table_name: str, parent_table_name: str):
+    def __init__(self, table_name: str, parent_table_name: str, verbose: bool = False):
         """Constructor for MathObject"""
         self.table_name = table_name
         self.parent_table_name = parent_table_name  # For equations it is eqn_group. For variables it is equations
@@ -222,7 +240,7 @@ class GroupedPhysicsObject:
         self.selected_parent_id: Optional[int] = None
         self.selected_data_records: Optional[Records] = None
         self.records_not_selected_unique: Optional[Records] = None
-        self.pull_grouped_data()
+        self.pull_grouped_data(verbose=verbose)
 
     def id_name(self):
         """Convenience method to return id_name"""
@@ -232,10 +250,11 @@ class GroupedPhysicsObject:
         """Convenenience method to return parent_table_id_name"""
         return self.parent_table_name + '_id'
 
-    def pull_grouped_data(self):
+    def pull_grouped_data(self, verbose: bool = False):
         """Extract grouped data from database"""
         self.grouped_data = \
-            generic_pull_grouped_data(table_name=self.table_name, parent_table_name=self.parent_table_name)
+            generic_pull_grouped_data(table_name=self.table_name, parent_table_name=self.parent_table_name,
+                                      verbose=verbose)
         self._set_all_records()
 
     def associate_parent(self, parent_id: int = None, child_id: int = None, new_record: dict = None,
@@ -341,7 +360,7 @@ class GroupedPhysicsObject:
 
                 cur.close()
 
-                self.pull_grouped_data()
+                self.pull_grouped_data(verbose=verbose)
 
     def selected_data_df(self, parent_id: int = None) -> DataFrame:
         """Retern selected data in DataFrame form"""
