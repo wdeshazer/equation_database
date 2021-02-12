@@ -30,6 +30,10 @@ class NoRecordIDError(UserWarning):
     """UserWarning for EquationGroup"""
 
 
+class NoGroupRecordAssociationsError(UserWarning):
+    """UserWarning for EquationGroup"""
+
+
 Record = NewType("Record", NamedTuple)
 Records = NewType("Records", List[Record])
 
@@ -339,19 +343,31 @@ class GroupedPhysicsObject:
 
                 self.pull_grouped_data()
 
-    def selected_data_df(self, parent_id: int = None):
+    def selected_data_df(self, parent_id: int = None) -> DataFrame:
         """Retern selected data in DataFrame form"""
-        return self.grouped_data.loc[parent_id, :]
+
+        try:
+            df = self.grouped_data.loc[parent_id, :]
+        except KeyError:
+            df: Optional[DataFrame] = None
+        return df
 
     def set_records_for_parent(self, parent_id: int = None):
         """Sets records for parents after an update"""
         selected_data_df = self.selected_data_df(parent_id)
-        self.selected_data_records = Records(list(selected_data_df.itertuples()))
+
+        if selected_data_df is None:
+            self.selected_data_records = None
+        else:
+            self.selected_data_records = Records(list(selected_data_df.itertuples()))
         self._set_records_not_in_parent()
 
     def data_not_selected_full_df(self):
         """Method to return data not in selected set as DataFrame"""
-        rcd_nums_in = self.selected_data_df().index
+        if self.selected_data_records is None:
+            rcd_nums_in = []
+        else:
+            rcd_nums_in = self.selected_data_df().index
         rcds_not_in = self.grouped_data.query(self.id_name() + '!=' + str(tuple(rcd_nums_in)))
         return rcds_not_in
 
