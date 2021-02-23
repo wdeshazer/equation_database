@@ -6,42 +6,139 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-# import sys
-# from PyQt5.QtCore import Qt, QSize
+from typing import Optional
 # noinspection PyUnresolvedReferences
 from PyQt5.uic import loadUi
 # from PyQt5.QtGui import QPainter, QColor, QIcon, QBrush
+from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import (
-    QTextEdit,
-    QListWidget, QDialog, QDialogButtonBox, QGraphicsView
+    QApplication, QTextEdit, QMessageBox, QAbstractItemView,
+    QListWidget, QDialog, QDialogButtonBox, QGraphicsView, QPushButton,
+    QGraphicsScene
 )
-# from equation_group import EquationGroup
+from db_utils import my_connect
+from equation import Equation
+from time_logging import TimeLogger
 
 
-class Equation_Dialog(QDialog):
+class EquationDialog(QDialog):
+    """Eqution Dialog"""
 
-    def __init__(self, *args, **kwargs):
-        super(Equation_Dialog, self).__init__(*args, **kwargs)
+    def __init__(self, eqn: Equation, *args, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+                 verbose: bool = False, **kwargs):
+        super().__init__(*args, **kwargs)
         loadUi('equation_dialog.ui', self)
         # Info Widgets
-        self.buttonbox: QDialogButtonBox = self.findChild(QDialogButtonBox, 'buttonbox')
-        self.equation_listbox: QListWidget = self.findChild(QListWidget, 'equation_listbox')
-        self.eq_group_listbox: QListWidget = self.findChild(QListWidget, 'equation_listbox')
-        self.notes_textbox: QTextEdit = self.findChild(QTextEdit, 'notes_textbox')
-        self.graphicsView: QGraphicsView = self.findChild(QGraphicsView, 'graphicsView')
+        self.buttonbox: QDialogButtonBox = self.findChild(QDialogButtonBox, 'buttonBox')
+        self.equation_list: QListWidget = self.findChild(QListWidget, 'equation_list')
+        self.eqn_group_list: QListWidget = self.findChild(QListWidget, 'eqn_group_list')
+        self.notes_text_edit: QTextEdit = self.findChild(QTextEdit, 'notes_text_edit')
+        self.image_g_view: QGraphicsView = self.findChild(QGraphicsView, 'image_g_view')
+        self.my_conn: Optional[dict] = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+        self.t_log: Optional[TimeLogger] = t_log
+        self.eqn = eqn
+        self._insert_button('Insert Selected')
+        self._new_eq_button('New Equation')
+        self.buttonbox.addButton(QDialogButtonBox.Cancel)
+        self.populate_equation_list()
+        self.equation_list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.equation_list.selectionModel().selectionChanged.connect(self.select_one_equation)
+        self.scene = QGraphicsScene()
+        self.image_g_view.setScene(self.scene)
 
-    def accept(self, verbose=False) -> None:
-        self.eq_group.insert(name=self.new_eq_group_lEdit.text(),
-                             notes=self.notes_textbox.toPlainText(),
-                             verbose=verbose)
+    def select_one_equation(self):
+        """Select One Eqution"""
+        inds = self.equation_list.selectedIndexes()
+        if 0 < len(inds) < 2:
+            self._populate_equation_details(inds[0].row())
+        else:
+            self._clear_equation_details()
+
+    def _insert_button(self, text):
+        btn = QPushButton(self.tr("&" + text))
+        btn.setDefault(True)
+        self.buttonbox.addButton(btn, QDialogButtonBox.AcceptRole)
+
+    def _new_eq_button(self, text):
+        btn = QPushButton(self.tr("&" + text))
+        btn.setDefault(False)
+        btn.clicked.connect(self.new_equation)
+        self.buttonbox.addButton(btn, QDialogButtonBox.ActionRole)
+
+    def _populate_equation_details(self, ind):
+        eqn = self.eqn
+        record = eqn.records_not_selected_unique[ind]
+        self.notes_text_edit.setText(record.notes)
+
+        img = QImage.fromData(record.image)
+        pixmap = QPixmap.fromImage(img)
+
+        scene = self.scene
+        scene.addPixmap(pixmap)
+        # self.latex_graphicbox.setScene(scene)
+        self.image_g_view.show()
+
+        p_records = eqn.other_parents(my_conn=self.my_conn, child_id=record.Index)
+
+        self.eqn_group_list.clear()
+        for record in p_records:
+            self.eqn_group_list.addItem(record.name)
+
+    def _clear_equation_details(self):
+        self.eqn_group_list.clear()
+        self.notes_text_edit.clear()
+        self.scene.clear()
+
+    def accept(self) -> None:
+        """Accept the insertion of new equation into equation_group"""
+        eqn = self.eqn
+        inds = self.equation_list.selectedIndexes()
+
+        if len(inds) == 0:
+            msg = QMessageBox()
+            msg.setText('Please Select Some Equations to Insert')
+            msg.exec_()
+            return
+
+        for selected_item in self.equation_list.selectedItems():
+            ind = self.equation_list.row(selected_item)
+            child_id = eqn.records_not_selected_unique[ind].Index
+            eqn.associate_parent(my_conn=self.my_conn, t_log=self.t_log,
+                                 parent_id=eqn.selected_parent_id, child_id=child_id)
+
+            item = self.equation_list.takeItem(ind)
+            self.parent().addItem(item)
+
+        print('Accept')
+        super().accept()
+
+    def new_equation(self):
+        """New Equation"""
+        eqn = self.eqn
+        eqn.new_record(my_conn=self.my_conn, t_log=self.t_log, parent_id=eqn.selected_parent_id)
+        eqn.pull_grouped_data()
+        eqn.set_records_for_parent()
+        new = eqn.selected_data_records[-1]
+        self.parent().addItem(new.name)
         super().accept()
 
     def reject(self) -> None:
+        """Reject"""
         print('rejected')
         super().reject()
 
-    def populateEquationList(self):
-        records = self.eq_group.records
-        if records:
-            for record in records:
-                self.existing_eq_group_list.addItem(record.name)
+    def populate_equation_list(self):
+        """Populate Equation List"""
+        records = self.eqn.records_not_selected_unique
+        for record in records:
+            self.equation_list.addItem(record.name)
+
+
+if __name__ == "__main__":
+    import sys
+    app = QApplication(sys.argv)
+    app_eqn = Equation()
+    app_eqn.set_records_for_parent(parent_id=1)
+    dlg = EquationDialog(eqn=app_eqn)
+    dlg.show()
+    sys.exit(app.exec_())
