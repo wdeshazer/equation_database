@@ -7,16 +7,16 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
-from math import isnan
 from warnings import warn
 from typing import NewType, List, NamedTuple, Optional
-from time import time
 from pandas import DataFrame, Series, read_sql
 from psycopg2.sql import SQL, Identifier, Placeholder, Composed
-from psycopg2 import connect, OperationalError
+from psycopg2 import OperationalError
 from psycopg2.extras import NamedTupleCursor
+
+from db_utils import my_connect
 from latex_data import LatexData
-from config import config
+from time_logging import TimeLogger
 
 
 class RecordIDTypeError(UserWarning):
@@ -40,11 +40,19 @@ Records = NewType("Records", List[Record])
 
 
 def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = None,
-                              verbose: bool = False) -> DataFrame:
+                              verbose: bool = False, my_conn: Optional[dict] = None,
+                              t_log: Optional[TimeLogger] = None) -> DataFrame:
     """Multi-index Extract DataFrame DB"""
+
     table_id_name: str = table_name + '_id'
     parent_id_name: str = parent_table_name + '_id'
     join_table: str = table_name + '_' + parent_table_name
+
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
+
+    my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+    conn = my_conn['conn']
 
     sql = 'SELECT * FROM {join_table} RIGHT JOIN {table} USING({table_id})'
 
@@ -54,37 +62,24 @@ def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = N
         table_id=Identifier(table_id_name)
     )
 
-    db_params = config()
-    conn = connect(**db_params)
-
-    t: Optional[float] = None
-
     if verbose is True:
-        t = time()
-        print("Entering database query at time: ", t)
+        t_log.new_event('Loading Database: ' + table_name)
 
     data_df = read_sql(query, con=conn, index_col=[parent_id_name, table_id_name])
     # This was a good example of loading objects to file
     # data_df['latex'] = data_df['latex'].apply(loads)
 
-    if verbose is True:
-        print("Exiting duration: ", time() - t)
-
     data_df['latex_obj'] = None
-
-    if verbose is True:
-        t = time()
-        print("Compiling Latex at time:", t)
 
     for row in data_df.itertuples():
         data_df.loc[row.Index, 'latex_obj'] = \
-            LatexData(latex=row.latex, template_id=row.template_id,
+            LatexData(my_conn=my_conn, latex=row.latex, template_id=row.template_id,
                       image=row.image, compiled_at=row.compiled_at)
 
-    data_df.sort_values([parent_id_name, 'insertion_order'], inplace=True)
+    data_df.sort_values([parent_id_name, 'insertion_order', 'created_at'], inplace=True)
 
     if verbose is True:
-        print("Complete duration:", time() - t)
+        t_log.new_event('Database Loaded: ' + table_name)
 
     return data_df
 
@@ -92,14 +87,20 @@ def generic_pull_grouped_data(table_name: str = None, parent_table_name: str = N
 def generic_associate_parent(parent_id: int = None, child_id: int = None,
                              table_name: str = None, parent_table_name: str = None,
                              insertion_order: int = None, inserted_by: str = None,
-                             new_record: dict = None, verbose: bool = False):
+                             new_record: dict = None, verbose: bool = False,
+                             my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None):
     """Associate the parent and child tables using parent id. Insertion_order and inserted_by are optional"""
     parent_key = parent_table_name + '_id'
     self_key = table_name + '_id'
 
     join_table = table_name + '_' + parent_table_name
 
-    db_params = config()
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
+
+    my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+    conn = my_conn['conn']
+    db_params = my_conn['db_params']
 
     if new_record is None:
         new_record = {}
@@ -121,15 +122,10 @@ def generic_associate_parent(parent_id: int = None, child_id: int = None,
                             fields=SQL(', ').join(map(Identifier, keys)),
                             values=SQL(', ').join(map(Placeholder, keys)))
 
-    conn = connect(**db_params)
-
-    if verbose:
-        print(query.as_string(conn))
-
     cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
-    if verbose:
-        print('Adding new record to Table: {aTable}'.format(aTable=join_table))
+    if verbose is True:
+        t_log.new_event('Associating Tables: ' + join_table)
 
     try:
         cur.execute(query, new_record)
@@ -140,33 +136,90 @@ def generic_associate_parent(parent_id: int = None, child_id: int = None,
     cur.close()
 
     data_df = \
-        generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name)
+        generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name,
+                                  my_conn=my_conn, t_log=t_log, verbose=verbose)
+
+    if verbose is True:
+        t_log.new_event('Finished Associating: ' + join_table)
 
     return data_df
 
 
-def generic_last_equation_number(table_data: Optional[DataFrame] = None) -> int:
+def generic_disassociate_parent(parent_id: int = None, child_id: int = None,
+                                table_name: str = None, parent_table_name: str = None,
+                                my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+                                verbose: bool = False):
+    """Associate the parent and child tables using parent id. Insertion_order and inserted_by are optional"""
+    parent_key = parent_table_name + '_id'
+    self_key = table_name + '_id'
+
+    join_table = table_name + '_' + parent_table_name
+
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
+
+    my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+    conn = my_conn['conn']
+
+    sql = 'DELETE FROM {table} WHERE ({self_id}, {parent_id}) = (%s, %s)'
+
+    query = SQL(sql).format(table=Identifier(join_table),
+                            self_id=Identifier(self_key),
+                            parent_id=Identifier(parent_key))
+
+    cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+    if verbose is True:
+        print(query.as_string(conn))
+        print(cur.mogrify(query, (child_id, parent_id)))
+        t_log.new_event('Disassociating Tables: ' + join_table)
+
+    try:
+        cur.execute(query, (child_id, parent_id))
+    except OperationalError as error:
+        print(error)
+
+    conn.commit()
+
+    data_df = \
+        generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name,
+                                  my_conn=my_conn, t_log=t_log, verbose=verbose)
+
+    if verbose is True:
+        t_log.new_event('Finished disassociating: ' + join_table)
+
+    return data_df
+
+
+def generic_last_equation_number(table_data: DataFrame) -> int:
     """Record Count using dataframe"""
-    numbers: Series = table_data.loc[slice(None), 'name'].str.extract(r'^[a-zA-Z]+\s([0-9]+)$')
-    rcount: Series = numbers.astype(int).max()
-
-    if isnan(rcount.iloc[0]) is True:
-        return 0
-
-    return rcount.iloc[0]
+    if len(table_data.index) == 0:
+        rcount = 1  # Starts at 1, because Genesis & Revelation are Equation  and Variable 1, respectively
+    else:
+        numbers: Series = table_data.loc[slice(None), 'name'].str.extract(r'^[a-zA-Z]+\s([0-9]+)$')
+        rcount_s: Series = numbers.fillna(0).astype(int).max()
+        rcount = int(rcount_s.iloc[0])
+    return rcount
 
 
 def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_table_name: str = None,
                           data_df: Optional[DataFrame] = None, name: str = None, new_record=None,
                           latex: LatexData = None, notes: str = None,
                           dimensions: int = 1, insertion_order: int = None, created_by: str = None,
-                          unit_id: int = 1, verbose: bool = None) -> DataFrame:
+                          unit_id: int = 1, verbose: bool = None,
+                          my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None
+                          ) -> DataFrame:
     """Insert New Record Into math_object"""
+
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
 
     if new_record is None:
         new_record = {}
 
-    db_params = config()
+    my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+    conn = my_conn['conn']
+    db_params = my_conn['db_params']
 
     table_id = table_name + '_id'
     next_id: int = generic_last_equation_number(data_df) + 1
@@ -188,8 +241,6 @@ def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_
                          fields=SQL(', ').join(map(Identifier, new_record.keys())),
                          values=SQL(', ').join(map(Placeholder, new_record.keys())))
 
-    conn = connect(**db_params)
-
     if verbose:
         print(query.as_string(conn))
 
@@ -210,13 +261,16 @@ def generic_new_record_db(parent_id: int = None, table_name: str = None, parent_
 
     if parent_id is not None:
         for record in new_records:
-            updated_df = generic_associate_parent(
-                parent_id=parent_id, child_id=getattr(record, table_id), insertion_order=insertion_order,
-                table_name=table_name, parent_table_name=parent_table_name, inserted_by=created_by, verbose=verbose
-            )
+            updated_df = generic_associate_parent(my_conn=my_conn, t_log=t_log,
+                                                  parent_id=parent_id, child_id=getattr(record, table_id),
+                                                  insertion_order=insertion_order,
+                                                  table_name=table_name, parent_table_name=parent_table_name,
+                                                  inserted_by=created_by, verbose=verbose
+                                                  )
     else:
         updated_df = \
-            generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name, verbose=verbose)
+            generic_pull_grouped_data(table_name=table_name, parent_table_name=parent_table_name,
+                                      my_conn=my_conn, t_log=t_log, verbose=verbose)
 
     return updated_df
 
@@ -231,7 +285,9 @@ def add_field(key: str = None, value=None):
 
 class GroupedPhysicsObject:
     """Base class for Equations, Variables, and Units"""
-    def __init__(self, table_name: str, parent_table_name: str, verbose: bool = False):
+    def __init__(self, table_name: str, parent_table_name: str,
+                 my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+                 verbose: bool = False,):
         """Constructor for MathObject"""
         self.table_name = table_name
         self.parent_table_name = parent_table_name  # For equations it is eqn_group. For variables it is equations
@@ -240,7 +296,8 @@ class GroupedPhysicsObject:
         self.selected_parent_id: Optional[int] = None
         self.selected_data_records: Optional[Records] = None
         self.records_not_selected_unique: Optional[Records] = None
-        self.pull_grouped_data(verbose=verbose)
+        self.my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+        self.pull_grouped_data(my_conn=my_conn, t_log=t_log, verbose=verbose)
 
     def id_name(self):
         """Convenience method to return id_name"""
@@ -250,41 +307,82 @@ class GroupedPhysicsObject:
         """Convenenience method to return parent_table_id_name"""
         return self.parent_table_name + '_id'
 
-    def pull_grouped_data(self, verbose: bool = False):
+    def pull_grouped_data(self, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+                          verbose: bool = False):
         """Extract grouped data from database"""
+
+        if my_conn is None:
+            my_conn = self.my_conn
+        else:
+            self.my_conn = my_conn
+
         self.grouped_data = \
             generic_pull_grouped_data(table_name=self.table_name, parent_table_name=self.parent_table_name,
-                                      verbose=verbose)
+                                      my_conn=my_conn, t_log=t_log, verbose=verbose)
         self._set_all_records()
 
     def associate_parent(self, parent_id: int = None, child_id: int = None, new_record: dict = None,
-                         insertion_order: int = None, inserted_by: str = None, verbose: bool = False):
+                         insertion_order: int = None, inserted_by: str = None,
+                         my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None, verbose: bool = False):
         """Associate a record with a group"""
         table_name = self.table_name
         parent_table_name = self.parent_table_name
+
+        if my_conn is None:
+            my_conn = self.my_conn
+        else:
+            self.my_conn = my_conn
 
         self.grouped_data = \
             generic_associate_parent(parent_id=parent_id, child_id=child_id, new_record=new_record,
                                      table_name=table_name, parent_table_name=parent_table_name,
                                      insertion_order=insertion_order, inserted_by=inserted_by,
-                                     verbose=verbose)
+                                     my_conn=my_conn, t_log=t_log, verbose=verbose)
 
         if self.selected_parent_id is not None:
-            self.set_records_for_parent(parent_id=self.selected_parent_id)
+            self.set_records_for_parent(parent_id=int(self.selected_parent_id))
+
+    def disassociate_parent(self, parent_id: int = None, child_id: int = None,
+                            my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+                            verbose: bool = False):
+        """Associate a record with a group"""
+        table_name = self.table_name
+        parent_table_name = self.parent_table_name
+
+        if my_conn is None:
+            my_conn = self.my_conn
+        else:
+            self.my_conn = my_conn
+
+        self.grouped_data = \
+            generic_disassociate_parent(parent_id=parent_id, child_id=child_id,
+                                        table_name=table_name, parent_table_name=parent_table_name,
+                                        my_conn=my_conn, t_log=t_log, verbose=verbose)
+
+        if self.selected_parent_id is not None:
+            self.set_records_for_parent(parent_id=int(self.selected_parent_id))
 
     def new_record(self, parent_id: int = None, name: str = None, latex: LatexData = None,
                    new_record: dict = None, notes: str = None, dimensions: int = 1,
                    insertion_order: int = None, created_by: str = None,
+                   my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
                    unit_id: int = 1, verbose: bool = None):
         """Insert a new_record Into """
         table_name = self.table_name
         parent_table_name = self.parent_table_name
+
+        if my_conn is None:
+            my_conn = self.my_conn
+        else:
+            self.my_conn = my_conn
+
         self.grouped_data = \
             generic_new_record_db(
                 parent_id=parent_id, table_name=table_name, parent_table_name=parent_table_name,
                 name=name, latex=latex, notes=notes, new_record=new_record,
                 data_df=self.grouped_data, dimensions=dimensions, unit_id=unit_id,
-                insertion_order=insertion_order, created_by=created_by,  verbose=verbose
+                insertion_order=insertion_order, created_by=created_by,
+                my_conn=my_conn, t_log=t_log, verbose=verbose
             )
 
     def _set_all_records(self):
@@ -293,7 +391,7 @@ class GroupedPhysicsObject:
     def update(self, an_id: id = None, where_key: str = None, name: str = None,
                data=None, latex: LatexData = None, notes: str = None, unit_id: int = None,
                dimensions: int = None, modified_by: str = None, created_by: str = None,
-               verbose: bool = None):
+               my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None, verbose: bool = None):
         """Insert New Record Into grouped_physics_object"""
 
         if where_key is None:
@@ -305,7 +403,14 @@ class GroupedPhysicsObject:
             if data is None:
                 data = {}
 
-            db_params = config()
+            if my_conn is None:
+                my_conn = self.my_conn
+            else:
+                self.my_conn = my_conn
+
+            my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+            conn = my_conn['conn']
+            db_params = my_conn['db_params']
 
             data.update(add_field('name', name))
             data.update(add_field('notes', notes))
@@ -344,7 +449,6 @@ class GroupedPhysicsObject:
 
                 data.update(where_key=an_id)
 
-                conn = connect(**db_params)
                 cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
                 if verbose:
@@ -364,6 +468,13 @@ class GroupedPhysicsObject:
 
     def selected_data_df(self, parent_id: int = None) -> DataFrame:
         """Retern selected data in DataFrame form"""
+        if parent_id is None:
+            parent_id = self.selected_parent_id
+        else:
+            self.selected_parent_id = int(parent_id)
+
+        if parent_id is None:
+            warn('No Parent ID set', NoRecordIDError)
 
         try:
             df = self.grouped_data.loc[parent_id, :]
@@ -373,6 +484,14 @@ class GroupedPhysicsObject:
 
     def set_records_for_parent(self, parent_id: int = None):
         """Sets records for parents after an update"""
+        if parent_id is None:
+            parent_id = self.selected_parent_id
+        else:
+            self.selected_parent_id = int(parent_id)
+
+        if parent_id is None:
+            warn('No Parent ID set', NoRecordIDError)
+
         selected_data_df = self.selected_data_df(parent_id)
 
         if selected_data_df is None:
@@ -404,3 +523,107 @@ class GroupedPhysicsObject:
     def _set_records_not_in_parent(self, parent_id: int = None):
         """Store Unique Records to file"""
         self.records_not_selected_unique = self.data_not_selected_unique_rcds(parent_id=parent_id)
+
+    def other_parents(self, child_id: int = None, my_conn: Optional[dict] = None,
+                      t_log: Optional[TimeLogger] = None, verbose: bool = None):
+        """Pulls list of other parents"""
+        gd = self.grouped_data
+        gd_inds = gd.index.dropna()
+        if len(gd_inds) > 0:
+            parent_df = gd.loc[(slice(None), child_id), :].droplevel(self.id_name())
+            pids = tuple(parent_df.index.to_list())
+
+            if verbose is True and t_log is None:
+                t_log = TimeLogger()
+
+            if my_conn is None:
+                my_conn = self.my_conn
+            else:
+                self.my_conn = my_conn
+
+            my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+            conn = my_conn['conn']
+
+            sql = "SELECT * FROM {parent_table} WHERE {parent_id} IN %s;"
+
+            query = SQL(sql).format(
+                parent_table=Identifier(self.parent_table_name),
+                parent_id=Identifier(self.parent_table_id_name())
+            )
+
+            if verbose is True:
+                t_log.new_event('Loading Database: ' + self.parent_table_name)
+
+            cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+            cur.execute(query, (pids, ))
+            records = cur.fetchall()
+            if verbose is True:
+                t_log.new_event('Database Loaded: ' + self.parent_table_name)
+        else:
+            if verbose is True:
+                t_log.new_event('No Other Parents')
+            records = []
+
+        return records
+
+    def latest_record(self):
+        """Returns latest record"""
+        return list(self.grouped_data.sort_values('created_at').tail(1).itertuples())
+
+    def update_insertion_order_for_selected(self, order: dict, my_conn: Optional[dict] = None,
+                                            t_log: Optional[TimeLogger] = None, verbose: bool = False):
+        """Populates insertion_order attribute"""
+        self.pull_grouped_data()
+        df = self.selected_data_df()
+
+        join_table: str = self.table_name + '_' + self.parent_table_name
+
+        if verbose is True and t_log is None:
+            t_log = TimeLogger()
+
+        if my_conn is None:
+            my_conn = self.my_conn
+        else:
+            self.my_conn = my_conn
+
+        my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+        self.my_conn = my_conn
+        conn = my_conn['conn']
+
+        sql = 'UPDATE {table} SET insertion_order = %s WHERE ({c_table_id}, {p_table_id}) = (%s, %s)'
+
+        query = SQL(sql).format(table=Identifier(join_table),
+                                c_table_id=Identifier(self.id_name()),
+                                p_table_id=Identifier(self.parent_table_id_name())
+                                )
+
+        cur = conn.cursor(cursor_factory=NamedTupleCursor)
+
+        if verbose is True:
+            t_log.new_event('Updating Insertion order for: ' + join_table)
+            print(query.as_string(conn))
+
+        for eq_name, i in order.items():
+            p_id = self.selected_parent_id
+            c_id = int(df.name[df.name == eq_name].index[0])
+
+            if verbose:
+                print(cur.mogrify(query, (i, c_id, p_id)))
+            try:
+                cur.execute(query, (i, c_id, p_id))
+            except OperationalError as error:
+                print(error)
+
+        conn.commit()
+
+        self.pull_grouped_data()
+
+        if verbose is True:
+            t_log.new_event('Finished Updating Insertion Order: ' + join_table)
+
+    # def __repr__(self):
+    #     return self.grouped_data.__repr__()
+    #
+    # def __str__(self):
+    #     return self.grouped_data.__str__()
