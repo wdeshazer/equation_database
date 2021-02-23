@@ -19,24 +19,33 @@ import pprint
 from io import BytesIO
 from datetime import datetime
 from dataclasses import dataclass
-from typing import NewType, List
+from typing import NewType, List, Optional
 from pickle import dumps
-from psycopg2 import connect, DatabaseError
+from psycopg2 import DatabaseError
 from psycopg2.extras import NamedTupleCursor
 from PIL import Image
-from config import config
+from time_logging import TimeLogger
+from db_utils import my_connect
 
 TemplateID = NewType("TemplateID", int)
 TemplateIDs = NewType("Templates", List[TemplateID])
 
 
-def available_templates(verbose: bool = False) -> TemplateIDs:
+def available_templates(my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+                        verbose: bool = False) -> TemplateIDs:
     """Function to pull available templates from ddtatbase"""
-    db_params = config()
-    conn = connect(**db_params)
+
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
+
+    my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+    conn = my_conn['conn']
 
     if verbose is True:
         print('Extracting available Templates')
+
+    if verbose is True:
+        t_log.new_event('Connecting to Templates on Database')
 
     cur = conn.cursor()
     try:
@@ -49,25 +58,33 @@ def available_templates(verbose: bool = False) -> TemplateIDs:
 
     template_ids = TemplateIDs([x[0] for x in output])
 
+    if verbose is True:
+        t_log.new_event('Finished Extracting Data')
+
     return template_ids
 
 
-def template(version: int = None, verbose: bool = False) -> NamedTupleCursor:
+def template(my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+             version: int = None, verbose: bool = False) -> NamedTupleCursor:
     """Function to pull the data for a specified template"""
-    db_params = config()
-    conn = connect(**db_params)
+
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
+
+    my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+    conn = my_conn['conn']
 
     cur = conn.cursor(cursor_factory=NamedTupleCursor)
 
     if version is None:
         if verbose:
-            print('Extracting Latest Template from Database')
+            t_log.new_event('Extracting Latest Template from Database')
 
         cur.execute('SELECT * FROM template ORDER BY created_at DESC LIMIT 1')
     else:
         try:
             if verbose:
-                print('Extracting Template with id: {} from Database'.format(version))
+                t_log.new_event('Extracting Template with id: {} from Database'.format(version))
 
             cur.execute('SELECT * FROM template WHERE ID=%s', (version,))
         except DatabaseError as error:
@@ -76,36 +93,45 @@ def template(version: int = None, verbose: bool = False) -> NamedTupleCursor:
             cur.execute('SELECT * FROM template ORDER BY created_at DESC LIMIT 1')
 
     if verbose:
-        print('Fetching data from Database')
+        t_log.new_event('Starting Template Extraction')
 
     the_template = cur.fetchone()
     cur.close()
+
+    if verbose:
+        t_log.new_event('Finished Template Extraction')
 
     return the_template
 
 
 def compile_pattern(pattern: str = 'm^3', keep: bool = True, temp_fname: str = "eq_db", version: int = None,
-                    a_template: str = None, verbose: bool = False, show: bool = False) -> bytes:
+                    a_template: str = None, verbose: bool = False,
+                    my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None) -> bytes:
     """General Latex Compile Function"""
 
     if verbose:
+        if t_log is None:
+            t_log = TimeLogger()
         print('\tArguments:')
         pprint.PrettyPrinter(indent=12).pprint(locals())
 
     if a_template is None:
-        a_template_record = template(version=version, verbose=verbose)
+        a_template_record = template(version=version, my_conn=my_conn, t_log=t_log, verbose=verbose)
         a_template = a_template_record.data
 
     os.chdir('LaTeX')
 
+    # preprocess pattern to make sure it conforms to latex
+    processed_pattern = pattern.strip()
+
     text_file = open(temp_fname+'.tex', "w")
-    text_file.write(a_template.replace('%__REPLACEMENT__TEXT', pattern))
+    text_file.write(a_template.replace('%__REPLACEMENT__TEXT', processed_pattern))
     text_file.close()
 
     # try:
     if verbose:
         print("Operating System: ", os.name)
-        print('Executing XeLaTeX:')
+        t_log.new_event('Executing XeLaTeX:')
 
     shell = os.name == 'nt'
 
@@ -120,31 +146,24 @@ def compile_pattern(pattern: str = 'm^3', keep: bool = True, temp_fname: str = "
 
     try:
         if verbose:
-            print('Converting to png:')
+            t_log.new_event('Converting to png')
 
         p_2 = subprocess.run(['convert.exe', '-density', '300', '-depth', '8', '-quality', '85', temp_fname + '.pdf',
                              'png32:'+temp_fname+'.png'], shell=shell, capture_output=True, text=True, check=True)
 
         if verbose:
+            t_log.new_event('Finished converting png')
             pprint.PrettyPrinter(indent=8).pprint(p_2)
 
     except subprocess.CalledProcessError as error:
-        print('Failed to make png:')
+        t_log.new_event('Failed to make png:')
         print(error.output)
 
     if verbose:
-        print('Pulling png data into python')
+        t_log.new_event('Pulling png data into python')
 
     with open(temp_fname + '.png', 'rb') as file:
         png_data: bytes = file.read()
-
-    if show:
-        if verbose:
-            print('Displaying Graphic')
-        stream = BytesIO(png_data)
-        image = Image.open(stream).convert("RGBA")
-        stream.close()
-        image.show()
 
     os.chdir('..')
 
@@ -154,7 +173,7 @@ def compile_pattern(pattern: str = 'm^3', keep: bool = True, temp_fname: str = "
     return png_data
 
 
-def clean_files(temp_fname="eq_db"):
+def clean_files(temp_fname="LaTeX/eq_db"):
     """Removes associated LaTeX Files. Unactive by default"""
     os.remove(temp_fname+'.aux')
     os.remove(temp_fname+'.log')
@@ -182,18 +201,25 @@ def main(pattern: str = 'm^3', keep: bool = False, temp_fname: str = "eq_db", ve
             a_template = my_file.readlines()
 
     compile_pattern(pattern=pattern, keep=keep, version=version, temp_fname=temp_fname, a_template=a_template,
-                    verbose=verbose, show=show)
+                    verbose=verbose)
 
+    if show is True:
+        print('add show function')
 
 # noinspection PyMethodParameters
 @dataclass
+# pylint: disable=too-many-instance-attributes
 class LatexData:
     """Class for managing LaTeX data, including image"""
-    latex: str = "a^2 + b^2 = c^2"
+    latex: str = r"a^2 + b^2 = c^2"
     template_id: TemplateID = None
     image: bytes = None
     compiled_at: datetime = None
     image_is_dirty: bool = False
+    my_conn: dict = None
+    t_log: TimeLogger = None
+    verbose: bool = False  # I don't like this, but I verbosity during initialization and at the moment __post_init__
+    # takes no arguments
 
     def __post_init__(self):
         """Template ID is set during Initialization and an update/potential
@@ -202,11 +228,22 @@ class LatexData:
         if self.template_id is None or self.template_id == 'latest':
             template_ids: TemplateIDs = available_templates()
             self.template_id = template_ids[-1]  # pylint: disable=unsubscriptable-object
-        self.update(image=self.image, image_is_dirty=self.image_is_dirty)
+        self.update(image=self.image, image_is_dirty=self.image_is_dirty, my_conn=self.my_conn,
+                    t_log=self.t_log, verbose=self.verbose)
 
     def update(self, latex: str = None, template_id: TemplateID = None, image: bytes = None,
-               image_is_dirty: bool = False, verbose: bool = False):
+               image_is_dirty: bool = False, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+               verbose: bool = False):
         """Main method. Maintains integrity of latex text and image by recompiling if core data gets updated"""
+
+        if my_conn is None:
+            my_conn = self.my_conn
+        else:
+            self.my_conn = my_conn
+
+        my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+        self.my_conn = my_conn
+
         if latex is not None:
             self.latex = latex
         if template_id is not None:
@@ -215,7 +252,8 @@ class LatexData:
             self.image = image
         else:
             self.image = \
-                compile_pattern(pattern=self.latex, version=self.template_id, verbose=verbose)
+                compile_pattern(pattern=self.latex, version=self.template_id, my_conn=my_conn,
+                                t_log=t_log, verbose=verbose)
             self.compiled_at = datetime.now()
             self.image_is_dirty = False
 
