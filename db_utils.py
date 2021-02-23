@@ -18,6 +18,7 @@ from psycopg2 import connect, OperationalError, Binary
 from psycopg2.extras import NamedTupleCursor
 from config import config
 from latex_template import compile_pattern, template
+from time_logging import TimeLogger
 
 
 class NoRecordIDError(UserWarning):
@@ -353,7 +354,7 @@ def new_record_db(parent_id: int = None, table_name: str = None, parent_table_na
 
     if parent_id is not None:
         for record in new_records:
-            associate_parent(parent_id=parent_id, child_id=getattr(record,table_id), insertion_order=insertion_order,
+            associate_parent(parent_id=parent_id, child_id=getattr(record, table_id), insertion_order=insertion_order,
                              table_name=table_name, parent_table_name=parent_table_name)
 
     updated_df = extract_db(table_name=table_name, parent_table_name=parent_table_name)
@@ -460,5 +461,27 @@ def associate_parent(parent_id: int = None, child_id: int = None,
     conn.commit()
 
     cur.close()
-
 # endregion
+
+
+def my_connect(my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None, verbose: bool = False):
+    """My connect is a function that initializes a database connection.
+       If a connection is passed then essentally it function as a pass-through.
+       Otherwise it establishes a connection."""
+    if verbose is True and t_log is None:
+        t_log = TimeLogger()
+
+    if my_conn is None:
+
+        if verbose is True:
+            t_log.new_event('Attaching to Database')
+
+        db_params = config()
+        conn = connect(**db_params)
+
+        if verbose is True:
+            t_log.new_event('Attached to Database')
+
+        my_conn = dict(db_params=db_params, conn=conn)
+
+    return my_conn
