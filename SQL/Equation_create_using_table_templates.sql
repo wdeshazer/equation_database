@@ -271,7 +271,7 @@ CREATE OR REPLACE FUNCTION trigger_insertion_order_eqn() RETURNS TRIGGER
         the_count integer;
     BEGIN
         if new.insertion_order is NULL then
-            SELECT INTO the_count COUNT(equation_id) FROM equation_eqn_group WHERE eqn_group_id = new.eqn_group_id;
+            SELECT INTO the_count COUNT(*) FROM equation_eqn_group WHERE eqn_group_id = new.eqn_group_id;
             new.insertion_order = the_count + 1;
             new.insertion_order_prev := the_count + 1;
         end if;

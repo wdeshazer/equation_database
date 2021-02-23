@@ -1,4 +1,4 @@
-This is XeTeX, Version 3.14159265-2.6-0.999992 (MiKTeX 20.10) (preloaded format=xelatex 2020.10.28)  29 JAN 2021 01:50
+This is XeTeX, Version 3.14159265-2.6-0.999992 (MiKTeX 20.10) (preloaded format=xelatex 2020.10.28)  20 FEB 2021 23:39
 entering extended mode
 **./eq_db.tex
 (eq_db.tex
@@ -593,45 +593,13 @@ LaTeX Font Info:    Font shape `TU/CambriaMath(3)/m/n' will be
 (Font)              scaled to size 7.29921pt on input line 37.
 LaTeX Font Info:    Font shape `TU/CambriaMath(3)/m/n' will be
 (Font)              scaled to size 5.99936pt on input line 37.
-! Missing $ inserted.
-<inserted text> 
-                $
-l.42 
-     
-I've inserted a begin-math/end-math symbol since I think
-you left one out. Proceed, with fingers crossed.
-
-! Missing $ inserted.
-<inserted text> 
-                $
-l.43     a^
-           2 + b^2 = c^2
-I've inserted a begin-math/end-math symbol since I think
-you left one out. Proceed, with fingers crossed.
-
-! Missing $ inserted.
-<inserted text> 
-                $
-l.44 
-     
-I've inserted a begin-math/end-math symbol since I think
-you left one out. Proceed, with fingers crossed.
-
-! Missing $ inserted.
-<inserted text> 
-                $
-l.46 
-     
-I've inserted a begin-math/end-math symbol since I think
-you left one out. Proceed, with fingers crossed.
-
 [1
 
 ] (eq_db.aux) ) 
 Here is how much of TeX's memory you used:
  11450 strings out of 412250
  254570 string characters out of 2850552
- 836106 words of memory out of 3000000
+ 835106 words of memory out of 3000000
  30836 multiletter control sequences out of 15000+200000
  536711 words of font info for 52 fonts, out of 3000000 for 9000
  1348 hyphenation exceptions out of 8191
