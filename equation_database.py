@@ -28,14 +28,15 @@ import ctypes
 import screeninfo
 
 from PyQt5.QtGui import QPainter, QColor, QIcon, QBrush, QPixmap, QImage
-from PyQt5.QtCore import QSize, Qt, QItemSelection
+from PyQt5.QtCore import QSize, Qt, QItemSelection, pyqtSlot
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QSplitter,
     QHBoxLayout, QVBoxLayout, QMainWindow, QGroupBox,
     QLabel, QLineEdit, QFrame, QComboBox,
     QSpacerItem, QSizePolicy, QPushButton, QGridLayout, QGraphicsScene,
     QTextEdit, QGraphicsView, QTableWidget, QGraphicsDropShadowEffect,
-    QListWidget, QAction, QAbstractItemView, QTableWidgetItem, QMessageBox
+    QAction, QAbstractItemView, QTableWidgetItem, QMessageBox,
+    QAbstractButton
 )
 
 from scipy.constants import golden_ratio
@@ -49,6 +50,7 @@ from equation_dialog import EquationDialog
 from equation import Equation  # , EquationRecord
 from variable import Variable, VariableRecord
 from variable_dialog import VariableDialog
+from CustomWidgets.filter_list_widget import EDFilterListWidget
 from unit import Unit
 from type_table import TypeTable
 from time_logging import TimeLogger
@@ -217,51 +219,16 @@ class Window(QMainWindow):
         size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
         self.analyze_frame.setSizePolicy(size_policy)
 
-        self.filter_frame = QFrame(self.eq_group_gbox)
-        self.filter_h_layout = QHBoxLayout(self.filter_frame)
-        self.filter_h_layout.setContentsMargins(0, 0, 0, 0)
-        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-        self.filter_frame.setSizePolicy(size_policy)
-
-        self.filter_lbl = QLabel("Filter")
-        self.filter_l_edit = QLineEdit(self.eq_group_gbox)
-        self.filter_h_layout.addWidget(self.filter_lbl)
-        self.filter_h_layout.addWidget(self.filter_l_edit)
-        self.eq_group_v_layout.addWidget(self.filter_frame)
-
-        self.equation_listbox = QListWidget(self.eq_group_gbox)
+        self.equation_filter_list = EDFilterListWidget(self.eq_group_gbox)
+        self.equation_listbox = self.equation_filter_list.list
+        # self.equation_listbox = QListWidget(self.eq_group_gbox)
         self.equation_listbox.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.equation_listbox.setSelectionMode(QAbstractItemView.ExtendedSelection)
         self.equation_listbox.selectionModel().selectionChanged.connect(self.select_one_equation)
-        # self.equation_listbox.selectionModel().currentChanged.connect(self.select_one_variable)
-        # self.equation_listbox.selectionModel().select.connect(self.select_one_variable)
-        # self.equation_listbox.itemSelectionChanged.connect(self.select_multiple_equations)
-        # self.equation_listbox.selectionModel().currentChanged.connect(self.select_one_variable)
+        self.equation_filter_list.add.connect(self.add_equation)
+        self.equation_filter_list.remove.connect(self.remove_equation)
 
-        self.eq_group_v_layout.addWidget(self.equation_listbox)
-
-        self.eq_add_btn = QPushButton("+")
-        self.eq_add_btn.setObjectName("add_rm_btn")
-        ar_w = 50
-        self.eq_add_btn.setFixedSize(QSize(ar_w, int(ar_w)))
-        self.eq_add_btn.clicked.connect(self.add_equation)
-
-        self.eq_rm_btn = QPushButton("-")
-        self.eq_rm_btn.setObjectName("add_rm_btn")
-        self.eq_rm_btn.clicked.connect(self.remove_equation)
-        self.eq_rm_btn.setFixedSize(QSize(ar_w, int(ar_w)))
-
-        self.eq_add_rm_frame = QFrame(self.eq_group_gbox)
-        size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-        self.eq_add_rm_frame.setSizePolicy(size_policy)
-        self.eq_add_rm_h_layout = QHBoxLayout(self.eq_add_rm_frame)
-        self.eq_add_rm_h_layout.setSpacing(2)
-        h_spacer = QSpacerItem(20, 40, QSizePolicy.MinimumExpanding, QSizePolicy.Expanding)
-        self.eq_add_rm_h_layout.addItem(h_spacer)
-        self.eq_add_rm_h_layout.addWidget(self.eq_add_btn)
-        self.eq_add_rm_h_layout.addWidget(self.eq_rm_btn)
-        self.eq_group_v_layout.addWidget(self.eq_add_rm_frame)
-
+        self.eq_group_v_layout.addWidget(self.equation_filter_list)
         # endregion
 
         # region Equation Details - Right Frame
@@ -464,6 +431,7 @@ class Window(QMainWindow):
 
         # endregion
 
+    @pyqtSlot()
     def new_equation_group(self):
         """Adds a new equation group"""
         dlg = EquationGroupDialog(self, eqn_group=self.eqn_grp, eqn=self.eq)
@@ -504,7 +472,7 @@ class Window(QMainWindow):
         """Clear all widgets"""
 
         if equation_selected is False:
-            self.equation_listbox.clear()
+            self.equation_filter_list.clear()
         self.name_l_edit.clear()
         self.codefile_l_edit.clear()
         self.type_cbox.clear()
@@ -526,13 +494,13 @@ class Window(QMainWindow):
     def populate_equation_listbox(self):
         """Populate equation listbox"""
         self.reset_selected_equation_data()
-        eq_lb = self.equation_listbox
+        eq_fl = self.equation_filter_list
         eq = self.eq
 
         self.clear_boxes(equation_selected=False)
         if eq.selected_data_records is not None:
             for row in eq.selected_data_records:
-                eq_lb.addItem(row.name)
+                eq_fl.addItem(row.name)
 
     def reset_selected_equation_data(self):
         """Reset Selected Equation Data"""
@@ -548,6 +516,7 @@ class Window(QMainWindow):
 
         eq.set_records_for_parent(parent_id=eq_grp_id)
 
+    @pyqtSlot(QItemSelection, QItemSelection)
     def select_one_equation(self, selected: QItemSelection, deselected: QItemSelection):
         """This type of selection shows all equation details"""
 
@@ -681,7 +650,8 @@ class Window(QMainWindow):
 
         self.state_data.update(dirty_data=dirty_data)
 
-    def allow_equation_change(self, response):
+    @pyqtSlot(QAbstractButton)
+    def allow_equation_change(self, response: QAbstractButton):
         """Allow Equation Change"""
         # selected: QItemSelection = self.state_data['selected']
         deselected: QItemSelection = self.state_data['deselected']
@@ -784,6 +754,7 @@ class Window(QMainWindow):
     def load_variables(self, parent_id: int = 1):
         """Method to populate variables table widget"""
 
+    @pyqtSlot()
     def add_variable(self):
         """Add Equation to Equation Database"""
         dlg = VariableDialog(var=self.var, my_conn=self.my_conn, parent=self)
@@ -804,6 +775,7 @@ class Window(QMainWindow):
             order.update({var_name: i})
         var.update_insertion_order_for_selected(order=order)
 
+    @pyqtSlot()
     def remove_variable(self):
         """Remove variable from equation"""
         inds = self.equation_listbox.selectedIndexes()
@@ -827,7 +799,7 @@ class Window(QMainWindow):
 
     def add_equation(self):
         """Add Equation to Equation Database"""
-        dlg = EquationDialog(eqn=self.eq, my_conn=self.my_conn, parent=self.equation_listbox)
+        dlg = EquationDialog(eqn=self.eq, my_conn=self.my_conn, parent=self.equation_filter_list)
 
         if dlg.exec_():
             print('Inserted')
@@ -837,7 +809,7 @@ class Window(QMainWindow):
     def update_equation_insert_order(self):
         """Update Insertion Order"""
         eq = self.eq
-        eq_lb = self.equation_listbox
+        eq_lb = self.equation_filter_list
 
         order = dict()
         for i in range(eq_lb.count()):
@@ -861,7 +833,7 @@ class Window(QMainWindow):
             child_id = eqn.selected_data_records[i].Index
             eqn.disassociate_parent(my_conn=self.my_conn, parent_id=parent_id, child_id=child_id)
             self.equation_taken = True
-            self.equation_listbox.takeItem(i)
+            self.equation_filter_list.takeItem(i)
 
         self.eq.set_records_for_parent(parent_id=self.eq.selected_parent_id)
 
