@@ -47,8 +47,8 @@ from equation_group import EquationGroup
 from db_utils import my_connect
 from equation_group_dialog import EquationGroupDialog
 from equation_dialog import EquationDialog
-from equation import Equation  # , EquationRecord
-from variable import Variable, VariableRecord
+from equations import GroupedEquations  # , EquationRecord
+from variables import GroupedVariables, GroupedVariableRecord
 from variable_dialog import VariableDialog
 from CustomWidgets.filter_list_widget import EDFilterListWidget
 from unit import Unit
@@ -403,8 +403,8 @@ class Window(QMainWindow):
         self.state_data = dict()
         # t_log.new_event("Equation Group Load")
         self.eqn_grp = EquationGroup(my_conn=my_conn, t_log=t_log, verbose=verbose)
-        self.eq = Equation(my_conn=my_conn, t_log=t_log, verbose=verbose)
-        self.var = Variable(my_conn=my_conn, t_log=t_log, verbose=verbose)
+        self.eq = GroupedEquations(my_conn=my_conn, t_log=t_log, verbose=verbose)
+        self.var = GroupedVariables(my_conn=my_conn, t_log=t_log, verbose=verbose)
         self.unit = Unit(my_conn=my_conn, t_log=t_log, verbose=verbose)
         self.eq_type = TypeTable(name='equation_type', my_conn=my_conn, t_log=t_log, verbose=verbose)
         self.var_type = TypeTable(name='variable_type', my_conn=my_conn, t_log=t_log, verbose=verbose)
@@ -613,7 +613,7 @@ class Window(QMainWindow):
             self.codefile_l_edit.setText(selected_eqn.code_file_path)
             self.select_a_type_cbox(a_type=selected_eqn.type_name)
             self.latex_textbox.setText(selected_eqn.latex)
-            self.latex_textbox.setAlignment(Qt.AlignCenter)
+            self.latex_textbox.setAlignment(Qt.AlignLeft)
             self.latex_textbox.latex_data = selected_eqn.latex_obj
             self.latex_textbox.db_ref_id = selected_eqn.Index
             self.show_latex_image(selected_eqn.image)
@@ -705,7 +705,7 @@ class Window(QMainWindow):
         data = header if info == 'header' else column
         return data
 
-    def add_record_to_variable_table(self, record: VariableRecord, row: int = None):  # , verbose: bool = False):
+    def add_record_to_variable_table(self, record: GroupedVariableRecord, row: int = None):  # , verbose: bool = False):
         """Add record to variable table"""
         tbl = self.variables_tbl
 
@@ -725,7 +725,7 @@ class Window(QMainWindow):
 
         un_id_for_var = record.unit_id
 
-        unit = self.unit.all_records_nt[un_id_for_var]
+        unit = self.unit.all_records[un_id_for_var]
         if unit.image is not None:
             img = QImage.fromData(unit.image)
             pixmap = QPixmap.fromImage(img)
