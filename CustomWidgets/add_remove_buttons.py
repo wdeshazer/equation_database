@@ -28,10 +28,6 @@ class EDAddRemoveButtons(QWidget):
         self.rm_btn.setObjectName("add_rm_btn")
         self.rm_btn.setFixedSize(QSize(ar_w, int(ar_w)))
 
-        # self.add_rm_frame = QFrame(self.parent())
-        # size_policy = QSizePolicy(QSizePolicy.MinimumExpanding, QSizePolicy.Fixed)
-        # self.add_rm_frame.setSizePolicy(size_policy)
-        # self.add_rm_h_layout = QHBoxLayout(self.add_rm_frame)
         h_layout.setSpacing(2)
         h_layout.setContentsMargins(0, 0, 0, 0)
         h_spacer = QSpacerItem(20, 40, QSizePolicy.Expanding, QSizePolicy.Fixed)
