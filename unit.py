@@ -6,9 +6,10 @@ __author__ = "William DeShazer"
 __version__ = "0.1.0"
 __license__ = "MIT"
 
+from collections import namedtuple
 from warnings import warn
 from typing import Optional, List, Tuple
-from pandas import DataFrame, read_sql
+from pandas import DataFrame, read_sql, Series
 from psycopg2.sql import SQL, Identifier, Placeholder, Composed
 from psycopg2 import OperationalError
 from psycopg2.extras import NamedTupleCursor
@@ -99,13 +100,19 @@ def add_field(key: str = None, value=None):
     return data
 
 
+UnitRecord = \
+    namedtuple('UnitRecord',
+               ['Index', 'name', 'latex', 'notes', 'image', 'template_id', 'image_is_dirty',  'created_at',
+                'created_by', 'modified_at',  'modified_by',  'compiled_at', 'type_name'])
+
+
 class Unit:
     """Class for managing and interfacing with Postgres Table eqn_group"""
     def __init__(self, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None, verbose: bool = False):
         """Constructor for eqn_group"""
         self.table_name = 'unit'
         self.all_records_df: Optional[DataFrame] = None
-        self.all_records_nt: Optional[List[Tuple]] = None
+        self.all_records: Optional[List[Tuple]] = None
         self.my_conn = my_conn
         self.pull_data(my_conn=my_conn, t_log=t_log, verbose=verbose)
 
@@ -119,7 +126,7 @@ class Unit:
             my_conn = self.my_conn
         self.all_records_df = generic_pull_data(table_name=self.table_name, my_conn=my_conn,
                                                 t_log=t_log, verbose=verbose)
-        self.all_records_nt = list(self.all_records_df.itertuples())
+        self.all_records = list(self.all_records_df.itertuples())
 
     def new_record(self, name: str = None, latex: LatexData = None,
                    new_record: dict = None, notes: str = None, created_by: str = None,
@@ -137,9 +144,9 @@ class Unit:
                 my_conn=my_conn, t_log=t_log, data_df=self.all_records_df, created_by=created_by,
                 verbose=verbose
             )
-        self.all_records_nt = list(self.all_records_df.itertuples())
+        self.all_records = list(self.all_records_df.itertuples())
 
-    def update(self, an_id: id = None, where_key: str = None, name: str = None,
+    def update(self, an_id: int = None, where_key: str = None, name: str = None,
                data=None, latex: LatexData = None, notes: str = None,
                modified_by: str = None, created_by: str = None,
                my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None, verbose: bool = False
@@ -213,3 +220,10 @@ class Unit:
                 cur.close()
 
                 self.pull_data(my_conn=my_conn, t_log=t_log, verbose=verbose)
+
+    def record(self, an_id: int = None):
+        """Returns individual record based on id"""
+        record_series: List = self.all_records_df.loc[an_id].to_list()
+        record_series.insert(0, an_id)
+        record = UnitRecord(*record_series)
+        return record

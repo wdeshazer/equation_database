@@ -1,5 +1,5 @@
 """
-Equation Group Provides helper functions for pulling the LaTeX template from the equations database
+Equation Group Provides helper functions for pulling the LaTeX show_template_manager from the equations database
 
 https://www.psycopg.org/docs/sql.html#
 https://naysan.ca/2020/05/09/pandas-to-postgresql-using-psycopg2-bulk-insert-performance-benchmark/
@@ -27,7 +27,7 @@ class NoRecordIDError(UserWarning):
 class TypeTable:
     """Class to handle database managment of types - Includes Equations, Units and Variables"""
 
-    def __init__(self, name: str = None, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+    def __init__(self, name: str, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
                  verbose: bool = False):
         self.name = name
         self.my_conn = my_conn
@@ -101,7 +101,7 @@ class TypeTable:
 
     def types(self):
         """Returns Types as Numpy"""
-        return self.types_df.index.to_numpy()
+        return self.types_df.index.to_list()
 
     def record_count(self) -> int:
         """Method to get total number of eqn_groups"""
