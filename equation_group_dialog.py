@@ -17,12 +17,12 @@ from PyQt5.QtWidgets import (
     QListWidget, QDialog, QDialogButtonBox
 )
 from equation_group import EquationGroup
-from equation import Equation
+from equations import GroupedEquations
 
 
 class EquationGroupDialog(QDialog):
     """Equation Group Dialog"""
-    def __init__(self, *args, eqn_group: Optional[EquationGroup] = None, eqn: Optional[Equation] = None,
+    def __init__(self, *args, eqn_group: Optional[EquationGroup] = None, eqn: Optional[GroupedEquations] = None,
                  **kwargs):
         super().__init__(*args, **kwargs)
         loadUi('eq_group_dialog.ui', self)
@@ -37,7 +37,7 @@ class EquationGroupDialog(QDialog):
         self.notes_textbox: QTextEdit = self.findChild(QTextEdit, 'notes_text_edit')
 
         self.eqn_group: Optional[EquationGroup] = eqn_group
-        self.eqn: Optional[Equation] = eqn
+        self.eqn: Optional[GroupedEquations] = eqn
         self.populate_equation_group_list()
 
     def accept(self, verbose=False) -> None:
@@ -86,7 +86,7 @@ if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
     app_eqn_group = EquationGroup()
-    app_eqn = Equation()
+    app_eqn = GroupedEquations()
     dlg = EquationGroupDialog(eqn_group=app_eqn_group, eqn=app_eqn)
     dlg.show()
     sys.exit(app.exec_())

@@ -1,5 +1,5 @@
 """
-Equation Group Provides helper functions for pulling the LaTeX template from the equations database
+Equation Group Provides helper functions for pulling the LaTeX show_template_manager from the equations database
 
 https://www.psycopg.org/docs/sql.html#
 https://stackoverflow.com/questions/41837339/pandas-multilevel-index-to-and-from-sql
@@ -318,7 +318,7 @@ def new_record_db(parent_id: int = None, table_name: str = None, parent_table_na
     template_id = the_template.id
 
     if image is None:
-        # If a_template is None the most recent template is used
+        # If a_template is None the most recent show_template_manager is used
         image = Binary(compile_pattern(pattern=latex, aTemplate=a_template, verbose=verbose))
 
     new_record.update(name=name, latex=latex, image=image, notes=notes, dimensions=dimensions,

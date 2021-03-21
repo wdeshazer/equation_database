@@ -18,14 +18,14 @@ from PyQt5.QtWidgets import (
 )
 from db_utils import my_connect
 from CustomWidgets.filter_list_widget import EDFilterListWidget
-from equation import Equation
+from equations import GroupedEquations
 from time_logging import TimeLogger
 
 
 class EquationDialog(QDialog):
     """Eqution Dialog"""
 
-    def __init__(self, eqn: Equation, *args, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+    def __init__(self, eqn: GroupedEquations, *args, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
                  verbose: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         loadUi('equation_dialog.ui', self)
@@ -146,7 +146,7 @@ class EquationDialog(QDialog):
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
-    app_eqn = Equation()
+    app_eqn = GroupedEquations()
     app_eqn.set_records_for_parent(parent_id=1)
     dlg = EquationDialog(eqn=app_eqn)
     dlg.show()

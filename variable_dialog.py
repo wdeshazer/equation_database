@@ -17,7 +17,7 @@ from PyQt5.QtWidgets import (
     QGraphicsScene, QLineEdit, QComboBox
 )
 from db_utils import my_connect
-from variable import Variable
+from variables import GroupedVariables
 # from unit import Unit
 from time_logging import TimeLogger
 
@@ -26,7 +26,7 @@ class VariableDialog(QDialog):
     """Variable Dialog manages the state of Variables"""
 
     # pylint: disable=too-many-instance-attributes
-    def __init__(self, var: Variable, *args, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
+    def __init__(self, var: GroupedVariables, *args, my_conn: Optional[dict] = None, t_log: Optional[TimeLogger] = None,
                  verbose: bool = False, **kwargs):
         super().__init__(*args, **kwargs)
         loadUi('variable_dialog.ui', self)
@@ -147,7 +147,7 @@ class VariableDialog(QDialog):
 if __name__ == "__main__":
     import sys
     app = QApplication(sys.argv)
-    app_var = Variable()
+    app_var = GroupedVariables()
     app_var.set_records_for_parent(parent_id=2)
     dlg = VariableDialog(var=app_var)
     dlg.show()
