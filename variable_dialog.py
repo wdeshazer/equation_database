@@ -7,8 +7,7 @@ __version__ = "0.1.0"
 __license__ = "MIT"
 
 from typing import Optional
-# noinspection PyUnresolvedReferences
-from PyQt5.uic import loadUi
+from PyQt5.uic import loadUi  # noqa
 # from PyQt5.QtGui import QPainter, QColor, QIcon, QBrush
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtWidgets import (
