@@ -3,7 +3,7 @@
 -- L
 
 -- Cleanup & Prep
--- DROP TABLE if EXISTS template CASCADE;
+-- DROP TABLE if EXISTS show_template_manager CASCADE;
 -- DROP TABLE if EXISTS math_object CASCADE;
 -- DROP TABLE if EXISTS equation CASCADE;
 -- DROP TABLE if EXISTS eqn_group CASCADE;
@@ -313,7 +313,7 @@ CREATE TRIGGER insert_var_order
 -- RETURNS TRIGGER
 -- AS $$ BEGIN
 --     IF new.template_id IS NULL THEN
---         new.template_id = (SELECT id FROM template ORDER BY created_at DESC FETCH FIRST ROW ONLY);
+--         new.template_id = (SELECT id FROM show_template_manager ORDER BY created_at DESC FETCH FIRST ROW ONLY);
 --     END IF;
 --     RETURN new;
 -- END;

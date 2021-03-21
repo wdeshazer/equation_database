@@ -1,0 +1,10 @@
+setup.py
+CustomWidgets/__init__.py
+CustomWidgets/add_remove_buttons.py
+CustomWidgets/dual_selection_widget.py
+CustomWidgets/filter_list_widget.py
+CustomWidgets/shift_buttons.py
+equation_database.egg-info/PKG-INFO
+equation_database.egg-info/SOURCES.txt
+equation_database.egg-info/dependency_links.txt
+equation_database.egg-info/top_level.txt

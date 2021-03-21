@@ -3,7 +3,7 @@
 -- L
 
 -- Cleanup & Prep
--- DROP TABLE if EXISTS template CASCADE;
+-- DROP TABLE if EXISTS show_template_manager CASCADE;
 -- DROP TABLE if EXISTS math_object CASCADE;
 -- DROP TABLE if EXISTS equation CASCADE;
 -- DROP TABLE if EXISTS eqn_group CASCADE;
@@ -132,8 +132,7 @@ CREATE TRIGGER eqn_group_modified
 CREATE TABLE equation (
     equation_id BIGSERIAL PRIMARY KEY,
     LIKE schema_templates.physics_object INCLUDING ALL,
-    type_name text  NOT NULL,
-    associated_code_file text
+    type_name text  NOT NULL
 );
 
 -- Table: Equation_Eqn_Group
@@ -320,7 +319,7 @@ CREATE OR REPLACE FUNCTION template_default()
 RETURNS TRIGGER
 AS $$ BEGIN
     IF new.template_id IS NULL THEN
-        new.template_id = (SELECT id FROM template ORDER BY created_at DESC FETCH FIRST ROW ONLY);
+        new.template_id = (SELECT id FROM show_template_manager ORDER BY created_at DESC FETCH FIRST ROW ONLY);
     END IF;
     RETURN new;
 END;

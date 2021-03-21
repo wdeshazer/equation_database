@@ -1,5 +1,5 @@
 """
-math_object Provides helper functions for pulling the LaTeX template from the equations database
+math_object Provides helper functions for pulling the LaTeX show_template_manager from the equations database
 
 update method: https://stackoverflow.com/questions/34774409/build-a-dynamic-update-query-in-psycopg2
 
@@ -65,7 +65,7 @@ class MathObject:
         template_id = aTemplate.id
 
         if image is None:
-            # If aTemplate is None the most recent template is used
+            # If aTemplate is None the most recent show_template_manager is used
             image = psycopg2.Binary(compile_pattern(pattern=latex, aTemplate=aTemplate, verbose=verbose))
 
         if table_order is None:
@@ -120,7 +120,7 @@ class MathObject:
     #     if latex is not None:
     #         updates['latex'] = latex
     #         if image is None:
-    #             theTemplate = template(version=template_id, verbose=verbose)
+    #             theTemplate = show_template_manager(version=template_id, verbose=verbose)
     #             aTemplate = theTemplate.data
     #             template_id = theTemplate.id
     #             updates['template_id'] = template_id
