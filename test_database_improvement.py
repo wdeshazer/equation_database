@@ -1,7 +1,7 @@
 from equation_database import TimeLogger
-from equation import Equation
+from equations import GroupedEquations
 from equation_group import EquationGroup
-from variable import Variable
+from variables import GroupedVariables
 from math import isnan
 from warnings import warn
 from typing import NewType, List, NamedTuple, Optional

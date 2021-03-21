@@ -4,15 +4,16 @@ import os
 from random import sample
 from pandas import DataFrame
 from equation_group import EquationGroup
-from equation import Equation
-from variable import Variable
+from equations import GroupedEquations
+from variables import GroupedVariables
+from latex_data import LatexData
 
 print("Importing Equation Groups")
 eq_grp = EquationGroup()
 print("Importing Equations")
-eq = Equation()
+eq = GroupedEquations()
 print("Importing Variables")
-v = Variable()
+v = GroupedVariables()
 
 
 grp_count = len(eq_grp.all_records)
@@ -87,3 +88,22 @@ for eq_id in eq_records.index:
             child_id = unused[ind].Index
             v.associate_parent(parent_id=eq_id, child_id=child_id)
             print("Associating parent: " + str(eq_id) + ' with: ' + str(child_id))
+
+
+from unit import Unit
+from latex_data import LatexData
+un = Unit()
+
+bb_file = open('Icons/big_bang_64x64.jpg', 'rb')
+bb_data = bb_file.read()
+bb_file.close()
+
+un_ltx = LatexData(latex='the beginning', image=bb_data)
+
+un.update(an_id=1, latex=un_ltx)
+
+# un_file = open('Icons/clipart-green-one-196b.png', 'rb')
+# bb_data = bb_file.read()
+# bb_file.close()
+#
+# un_one = LatexData(latex='$1$')

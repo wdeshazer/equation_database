@@ -1,5 +1,5 @@
 """
-latex_template Provides helper functions for pulling the LaTeX template from the equations database
+LatexDate provides a mechanism for mainting the integrity and atomicity of the latex string, template, and image
 
 Example:
         python latex_template.py --verbose --keep --pattern '\\si{\\km}^3' --show
@@ -16,15 +16,18 @@ import os
 import subprocess
 import argparse
 import pprint
+from warnings import warn
 from io import BytesIO
 from datetime import datetime
 from dataclasses import dataclass
 from typing import NewType, List, Optional
+from pathlib import Path
 from pickle import dumps
 from psycopg2 import DatabaseError
 from psycopg2.extras import NamedTupleCursor
 from PIL import Image
 from time_logging import TimeLogger
+from template import TemplateTable
 from db_utils import my_connect
 
 TemplateID = NewType("TemplateID", int)
@@ -119,7 +122,13 @@ def compile_pattern(pattern: str = 'm^3', keep: bool = True, temp_fname: str = "
         a_template_record = template(version=version, my_conn=my_conn, t_log=t_log, verbose=verbose)
         a_template = a_template_record.data
 
-    os.chdir('LaTeX')
+    this_path = Path.cwd()
+    if this_path.name == 'CustomWidgets':
+        os.chdir('../LaTeX')
+    elif this_path.name == 'equation_database':
+        os.chdir('LaTeX')
+    else:
+        warn('Unrecognized Directory')
 
     # preprocess pattern to make sure it conforms to latex
     processed_pattern = pattern.strip()
@@ -165,7 +174,7 @@ def compile_pattern(pattern: str = 'm^3', keep: bool = True, temp_fname: str = "
     with open(temp_fname + '.png', 'rb') as file:
         png_data: bytes = file.read()
 
-    os.chdir('..')
+    os.chdir(this_path)
 
     if keep is False:
         clean_files(temp_fname)
@@ -206,6 +215,7 @@ def main(pattern: str = 'm^3', keep: bool = False, temp_fname: str = "eq_db", ve
     if show is True:
         print('add show function')
 
+
 # noinspection PyMethodParameters
 @dataclass
 # pylint: disable=too-many-instance-attributes
@@ -225,9 +235,10 @@ class LatexData:
         """Template ID is set during Initialization and an update/potential
             recompile if either there is no image or the image is inconsistent with the LaTeX.
              An inconsistency can only happen when the LaTeX field is update manually with an SQL query"""
-        if self.template_id is None or self.template_id == 'latest':
-            template_ids: TemplateIDs = available_templates()
-            self.template_id = template_ids[-1]  # pylint: disable=unsubscriptable-object
+        if self.image is None:
+            if self.template_id is None or self.template_id == 'latest':
+                template_ids: TemplateIDs = available_templates()
+                self.template_id = template_ids[-1]  # pylint: disable=unsubscriptable-object
         self.update(image=self.image, image_is_dirty=self.image_is_dirty, my_conn=self.my_conn,
                     t_log=self.t_log, verbose=self.verbose)
 
@@ -236,13 +247,14 @@ class LatexData:
                verbose: bool = False):
         """Main method. Maintains integrity of latex text and image by recompiling if core data gets updated"""
 
-        if my_conn is None:
-            my_conn = self.my_conn
-        else:
-            self.my_conn = my_conn
+        if image is None:
+            if my_conn is None:
+                my_conn = self.my_conn
+            else:
+                self.my_conn = my_conn
 
-        my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
-        self.my_conn = my_conn
+            my_conn = my_connect(my_conn=my_conn, t_log=t_log, verbose=verbose)
+            self.my_conn = my_conn
 
         if latex is not None:
             self.latex = latex
@@ -256,6 +268,9 @@ class LatexData:
                                 t_log=t_log, verbose=verbose)
             self.compiled_at = datetime.now()
             self.image_is_dirty = False
+
+    def template_table(self):
+        return TemplateTable(my_conn=self.my_conn)
 
     def show(self):
         """Display associated image"""

@@ -1,5 +1,5 @@
 """
-latex_template Provides helper functions for pulling the LaTeX template from the equations database
+latex_template Provides helper functions for pulling the LaTeX show_template_manager from the equations database
 
 Example:
     python latex_template.py --verbose --keep --pattern '\\si{\\km}^3' --show
@@ -35,7 +35,7 @@ def template(version: int = None, verbose: bool = False) -> NamedTupleCursor:
             print('Extracting Latest Template from Database')
             t.start()
 
-        cur.execute('SELECT * FROM template ORDER BY created_at DESC LIMIT 1')
+        cur.execute('SELECT * FROM show_template_manager ORDER BY created_at DESC LIMIT 1')
 
         if verbose:
             t.stop()
@@ -46,15 +46,15 @@ def template(version: int = None, verbose: bool = False) -> NamedTupleCursor:
                 print('Extracting Template with id: {} from Database'.format(version))
                 t.start()
 
-            cur.execute('SELECT * FROM template WHERE ID=%s', version)
+            cur.execute('SELECT * FROM show_template_manager WHERE ID=%s', version)
 
             if verbose:
                 t.stop()
 
         except Exception as error:
-            print("Couldn't retrieve that template.", error)
-            print("Returning latest template.")
-            cur.execute('SELECT * FROM template ORDER BY created_at DESC LIMIT 1')
+            print("Couldn't retrieve that show_template_manager.", error)
+            print("Returning latest show_template_manager.")
+            cur.execute('SELECT * FROM show_template_manager ORDER BY created_at DESC LIMIT 1')
 
     if verbose:
         print('Fetching data from Database')
@@ -200,7 +200,7 @@ if __name__ == '__main__':
     parser.add_argument("--version", dest='version',
                         help='int: Template Version. None value or non-existent returns latest',
                         default=None)
-    parser.add_argument("--template_file", dest='template_file', help='User specified LaTeX template file',
+    parser.add_argument("--template_file", dest='template_file', help='User specified LaTeX show_template_manager file',
                         default=None)
     parser.add_argument("--verbose", dest='verbose', help='Output run messages', action='store_true')
     parser.add_argument("--show", dest='show', help='Show image file', action='store_true')
