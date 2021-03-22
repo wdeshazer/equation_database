@@ -314,7 +314,7 @@
   <customwidget>
    <class>LatexWidget</class>
    <extends>QWidget</extends>
-   <header>latex_widget</header>
+   <header>CustomWidgets/latex_widget</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

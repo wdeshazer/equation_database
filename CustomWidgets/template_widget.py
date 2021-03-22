@@ -27,7 +27,10 @@ class TemplateWidget(QDialog):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Info Widgets
-        loadUi('template_widget.ui', self)
+        try:
+            loadUi('CustomWidgets/template_widget.ui', self)
+        except FileNotFoundError:
+            loadUi('template_widget.ui', self)
 
         self.available_cb.currentIndexChanged.connect(self.selected_data)
 

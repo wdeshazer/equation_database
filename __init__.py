@@ -1,1 +1,1 @@
-CustomWidgets
+from .CustomWidgets import *

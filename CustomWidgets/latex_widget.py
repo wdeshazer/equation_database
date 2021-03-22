@@ -55,7 +55,11 @@ class LatexWidget(QWidget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        loadUi('latex_widget.ui', self)
+
+        try:
+            loadUi('CustomWidgets/latex_widget.ui', self)
+        except FileNotFoundError:
+            loadUi('latex_widget.ui', self)
 
         self.scene = QGraphicsScene()
         self.graphics_view.setScene(self.scene)

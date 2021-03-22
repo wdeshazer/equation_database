@@ -34,7 +34,10 @@ class VariableDetails(QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         # Info Widgets
-        loadUi('variable_details.ui', self)
+        try:
+            loadUi('CustomWidgets/variable_details.ui', self)
+        except FileNotFoundError:
+            loadUi('variable_details.ui', self)
 
     def set_variable_types(self, var_types: Optional[List[str]] = None):
         """Populate variable types - Usually done once after widget creation"""
